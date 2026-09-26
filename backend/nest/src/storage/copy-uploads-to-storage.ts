@@ -88,7 +88,8 @@ async function main() {
       const inBucket = await storage.list(`${folder}/`);
       const wrong = used.filter(
         (name) =>
-          inBucket.get(`${folder}/${name}`) !== statSync(join(dir, name)).size,
+          inBucket.get(`${folder}/${name}`)?.size !==
+          statSync(join(dir, name)).size,
       );
       problems += wrong.length;
       for (const name of wrong) {

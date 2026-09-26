@@ -20,6 +20,7 @@ React (:3000)  ──HTTP──▶  NestJS gateway (:4000)  ──internal──
 | Gateway (NestJS + TypeORM) | Identity, ownership, validation, database, uploads. Sole caller of the ML service. | Working |
 | PostgreSQL | Patients, screenings, results, access grants, activity log. | Docker (`docker-compose.yml`) |
 | Object storage (MinIO / S3) | Retinal photographs, evidence renders, measurement packets. | Docker (`docker-compose.yml`) |
+| Redis + BullMQ | The background job queue: severity analyses, nightly cleanup. | Docker (`docker-compose.yml`) |
 | ML service (FastAPI) | Loads the model, runs inference. | Working — see [backend/fastapi/README.md](backend/fastapi/README.md) |
 
 The gateway calls the ML service at `ML_SERVICE_URL`. There is no fallback: with
@@ -37,9 +38,9 @@ Requires [Bun](https://bun.sh) and [Docker Desktop](https://www.docker.com/produ
 cp .env.example .env
 cp backend/nest/.env.example backend/nest/.env
 
-# the database, the object storage and pgAdmin
+# the database, the object storage, the job queue and pgAdmin
 docker compose up -d
-docker compose ps            # postgres and minio should say (healthy)
+docker compose ps            # postgres, minio and redis should say (healthy)
 ```
 
 | What | Where |
@@ -107,6 +108,35 @@ and the doctor's access grant.
 
 Moving an older install from the `uploads/` folder: `bun run
 storage:copy-from-disk` in `backend/nest` (copies, verifies, deletes nothing).
+
+## Background jobs
+
+A severity analysis takes about seventy seconds, far too long to hold a
+request open. It goes on a **queue** in Redis instead, managed by BullMQ (the
+Node.js counterpart of Python's Celery), and a **worker** in the gateway takes
+jobs off it one at a time — one, because the models share one GPU.
+
+```
+POST /detections/:id/severity ──▶ Redis queue ──▶ worker ──▶ FastAPI Phase 2
+        answers at once              waits          follows it, then writes the
+        with a job id                               result to Postgres + storage
+```
+
+- **Durable.** The job lives in Redis, not in a process's memory. If the
+  gateway restarts, the job is picked up again; if the analyser restarts or
+  cannot be reached, the job is retried — four tries in all, 30 s, 60 s and
+  120 s apart, time enough for the analyser to reload its models. If the analyser *refuses the photographs*, it fails at once with the
+  reason: trying the same photographs again would get the same answer.
+- **The worker is the only code that talks to the analyser.** It writes the
+  result the moment the analysis ends. Routes only read — the frontend polls
+  as before and sees no difference.
+- **Scheduled work** uses the same queue: every night at 03:00 (`CLEANUP_CRON`)
+  a job removes what abandoned previews left behind — staged photographs,
+  unsaved results, unused renders and their grants. It never touches anything
+  a saved screening uses.
+
+`GET /api/health` answers 200 only when the database, the storage and the
+queue all respond, and 503 naming the one that does not.
 
 The schema is owned by migrations, not by the entity classes — `synchronize` is
 off. Pending migrations run at boot, so a fresh clone comes up correctly.

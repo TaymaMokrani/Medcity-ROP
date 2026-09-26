@@ -7,7 +7,7 @@ import { AccessService } from '../access/access.service';
 import { AccessGrant } from '../access/access-grant.entity';
 import { AuditService } from '../audit/audit.service';
 import { MlService } from '../ml/ml.service';
-import { SeverityService } from '../severity/severity.service';
+import { SeverityQueueService } from './severity-queue.service';
 import { StorageService } from '../storage/storage.service';
 
 /**
@@ -17,7 +17,7 @@ import { StorageService } from '../storage/storage.service';
  * packets — took a job id and checked nothing at all: any signed-in doctor
  * who had a job id could read another doctor's patient.
  *
- * These tests hold that shut. The severity service throws if it is reached,
+ * These tests hold that shut. The job queue throws if it is reached,
  * so a passing test also proves the check happens *before* the request goes
  * anywhere, not after the data has already been fetched.
  */
@@ -58,22 +58,17 @@ function build() {
   );
 
   const reached = { severity: false };
-  const severity = {
-    status: () => {
-      reached.severity = true;
-      throw new Error('the severity service must not be reached');
-    },
-    evidence: () => {
-      reached.severity = true;
-      throw new Error('the severity service must not be reached');
-    },
+  const refuse = () => {
+    reached.severity = true;
+    throw new Error('the queue must not be reached');
   };
+  const severity = { describe: refuse, summary: refuse, evidence: refuse };
 
   const service = new DetectionsService(
     {} as unknown as Repository<Detection>,
     {} as unknown as Repository<Patient>,
     {} as unknown as MlService,
-    severity as unknown as SeverityService,
+    severity as unknown as SeverityQueueService,
     access,
     { record: () => Promise.resolve() } as unknown as AuditService,
     {} as unknown as StorageService,
@@ -83,7 +78,7 @@ function build() {
 }
 
 describe('severity jobs are scoped to the doctor who started them', () => {
-  it('refuses progress on someone else’s job, without calling the analyser', async () => {
+  it('refuses progress on someone else’s job, without reaching the queue', async () => {
     const { service, access, reached } = build();
     await access.grant('job', JOB, OWNER);
 
@@ -110,14 +105,14 @@ describe('severity jobs are scoped to the doctor who started them', () => {
     );
   });
 
-  it('lets the doctor who started it through to the analyser', async () => {
+  it('lets the doctor who started it through to the queue', async () => {
     const { service, access, reached } = build();
     await access.grant('job', JOB, OWNER);
 
     // The stub throws once the check has passed, which is how we tell the
     // difference between "refused" and "allowed, then failed downstream".
     await expect(service.severityJob(JOB, OWNER)).rejects.toThrow(
-      'the severity service must not be reached',
+      'the queue must not be reached',
     );
     expect(reached.severity).toBe(true);
   });

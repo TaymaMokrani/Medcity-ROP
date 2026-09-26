@@ -17,6 +17,11 @@ import {
 import type { Readable } from 'stream';
 import { contentTypeOf, isOwnedKey } from './keys';
 
+export interface ListedObject {
+  size: number;
+  modified: Date;
+}
+
 export interface StoredObject {
   stream: Readable;
   contentType: string;
@@ -112,9 +117,10 @@ export class StorageService implements OnModuleInit {
     return Buffer.concat(chunks);
   }
 
-  /** Every object under a prefix, with its size. Used to verify a copy. */
-  async list(prefix: string): Promise<Map<string, number>> {
-    const found = new Map<string, number>();
+  /** Every object under a prefix, with its size and date. Used to verify a
+   * copy and to find what the nightly cleanup may remove. */
+  async list(prefix: string): Promise<Map<string, ListedObject>> {
+    const found = new Map<string, ListedObject>();
     let token: string | undefined;
     do {
       const page = await this.client.send(
@@ -125,11 +131,21 @@ export class StorageService implements OnModuleInit {
         }),
       );
       for (const item of page.Contents ?? []) {
-        if (item.Key) found.set(item.Key, item.Size ?? 0);
+        if (item.Key) {
+          found.set(item.Key, {
+            size: item.Size ?? 0,
+            modified: item.LastModified ?? new Date(0),
+          });
+        }
       }
       token = page.IsTruncated ? page.NextContinuationToken : undefined;
     } while (token);
     return found;
+  }
+
+  /** Throws unless the bucket answers. For the health check. */
+  async ping(): Promise<void> {
+    await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
   }
 
   /** Deletes keys this app wrote. Anything else is ignored, not deleted. */

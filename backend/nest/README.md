@@ -33,6 +33,8 @@ silently fall back to.
 | `STORAGE_BUCKET` | — | **Required.** Created at boot if missing. |
 | `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | — | **Required.** Locally the `MINIO_ROOT_*` values from the root `.env`. |
 | `STORAGE_REGION` | `us-east-1` | Only matters for Amazon S3. |
+| `REDIS_URL` | — | **Required.** The job queue: `redis://:<REDIS_PASSWORD>@127.0.0.1:6379`. |
+| `CLEANUP_CRON` | `0 3 * * *` | When the cleanup of abandoned previews runs. |
 | `PORT` | `4000` | |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated. No wildcard — requests carry credentials. |
 | `ML_SERVICE_URL` | *(empty)* | Set once FastAPI exists; empty uses the local placeholder. |
@@ -47,6 +49,9 @@ silently fall back to.
 | `detections` | Screening CRUD, image upload, and the ROP vocabulary (`rop.ts`). |
 | `storage` | The only client of object storage (S3 API): put, stream, delete. Key naming in `keys.ts`. |
 | `files` | `GET /files/<key>`: streams a stored file after checking the access grant. |
+| `queue` | The Redis connection shared by every BullMQ queue. |
+| `detections` (queue) | `SeverityQueueService` puts analyses on the queue; `SeverityProcessor` is the worker, and the only code that talks to the Phase 2 analyser. |
+| `maintenance` | The nightly cleanup job and its schedule. |
 | `ml` | The single point of contact with the ML layer. |
 | `database` | Connection options shared by the app and the CLI, plus the migrations. |
 | `common` | Shared id generation. |

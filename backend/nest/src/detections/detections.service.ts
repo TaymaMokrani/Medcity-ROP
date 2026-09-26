@@ -34,14 +34,10 @@ import {
   type Zone,
 } from './rop';
 import { storedImageUrls, storedObjectKeys } from './detection-storage';
-import { storeEvidenceImages, storedEvidenceUrls } from './severity-storage';
 import type { EyeFiles } from './upload.config';
 import { MlService, type EyePrediction } from '../ml/ml.service';
-import {
-  SeverityService,
-  type SeverityJob,
-  type UploadedImage,
-} from '../severity/severity.service';
+import type { SeverityJob, UploadedImage } from '../severity/severity.service';
+import { SeverityQueueService } from './severity-queue.service';
 import { ExaminerRecordDto } from './dto/examiner-record.dto';
 import { generateId } from '../common/id';
 import type { Page } from '../common/page';
@@ -68,7 +64,7 @@ export class DetectionsService {
     @InjectRepository(Patient)
     private readonly patientRepository: Repository<Patient>,
     private readonly mlService: MlService,
-    private readonly severityService: SeverityService,
+    private readonly severityQueue: SeverityQueueService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
@@ -308,16 +304,8 @@ export class DetectionsService {
     // approved and what gets stored the same thing.
     if (severityJobId) {
       detection.phase2JobId = severityJobId;
-      detection.phase2Status = 'running';
       try {
-        const analysed = await this.collectSeverity(detection, {
-          jobId: severityJobId,
-          status: 'done',
-          step: 'complete',
-          progress: { done: 0, total: 0 },
-          seconds: 0,
-          error: null,
-        });
+        const analysed = await this.attachPreview(detection, severityJobId);
         await this.recordCreated(analysed, ownerId, true);
         return analysed;
       } catch (error) {
@@ -368,30 +356,28 @@ export class DetectionsService {
     return detection;
   }
 
-  /** The stored photographs of each screened eye, read back from storage. */
-  private async storedPhotosPerEye(
+  /** The stored photographs of each screened eye, as storage keys. */
+  private storedPhotosPerEye(
     detection: Detection,
-  ): Promise<Partial<Record<Eye, UploadedImage[]>>> {
-    const perEye: Partial<Record<Eye, UploadedImage[]>> = {};
+  ): Partial<Record<Eye, string[]>> {
+    const perEye: Partial<Record<Eye, string[]>> = {};
     for (const eye of eyesFor(detection.eye)) {
       const keys = (detection.images ?? [])
         .filter(
           (image) => image.eye === eye && image.url.startsWith(PHOTO_PREFIX),
         )
         .map((image) => image.url);
-      if (!keys.length) continue;
-      perEye[eye] = await Promise.all(
-        keys.map(async (key) => ({
-          buffer: await this.storage.read(key),
-          originalname: key.slice(PHOTO_PREFIX.length),
-        })),
-      );
+      if (keys.length) perEye[eye] = keys;
     }
     return perEye;
   }
 
   /**
-   * Starts the severity analysis for a stored screening.
+   * Queues the severity analysis for a stored screening.
+   *
+   * Answers at once: the job waits in the queue and the worker runs it. The
+   * screening follows it through `phase2Status` — queued, running, then done or
+   * failed — which the worker keeps up to date.
    *
    * Deliberately not gated on the Phase 1 risk. The interface recommends which
    * eyes are worth analysing, but a doctor who wants a measurement on an eye
@@ -408,7 +394,7 @@ export class DetectionsService {
       return detection;
     }
 
-    const perEye = await this.storedPhotosPerEye(detection);
+    const perEye = this.storedPhotosPerEye(detection);
     if (!Object.keys(perEye).length) {
       throw new BadRequestException(
         'This screening has no stored photographs to measure. Only screenings ' +
@@ -416,7 +402,11 @@ export class DetectionsService {
       );
     }
 
-    const job = await this.severityService.startFromFiles(perEye, detection.id);
+    const job = await this.severityQueue.enqueueScreening(
+      detection.id,
+      perEye,
+      ownerId,
+    );
     await this.access.grant('job', job.jobId, ownerId);
 
     detection.phase2Status = job.status;
@@ -465,7 +455,11 @@ export class DetectionsService {
       throw new BadRequestException('No photographs were attached');
     }
 
-    const job = await this.severityService.startFromFiles(uploads, 'preview');
+    const job = await this.severityQueue.enqueuePreview(
+      uploads,
+      'preview',
+      ownerId,
+    );
     // The job is the only handle on this analysis until it is saved, so it
     // gets an owner the moment it exists. Everything that later reads it —
     // progress, assessment, evidence packets, renders — checks this grant.
@@ -476,35 +470,26 @@ export class DetectionsService {
   /**
    * A preview job's progress, and its assessment once it is done.
    *
-   * Rendered evidence is written to object storage under the job id, so the viewer can show it before anything is saved. Files left behind by
-   * a preview the doctor abandons are the price of not making them commit first.
+   * The worker keeps a finished preview's assessment and renders in storage, so
+   * this only reads: nothing here waits on, or even talks to, the analyser.
    */
   async severityJob(jobId: string, ownerId: string) {
     await this.access.require('job', jobId, ownerId);
 
-    const job = await this.severityService.status(jobId);
+    const job = await this.severityQueue.describe(jobId);
+    if (!job) {
+      throw new NotFoundException(
+        'This analysis is no longer available. Run it again.',
+      );
+    }
     if (job.status !== 'done') return { job, summary: null };
-
-    const summary = (await this.severityService.result(
-      jobId,
-    )) as unknown as Record<string, unknown>;
-    await storeEvidenceImages(
-      this.storage,
-      this.severityService,
-      jobId,
-      jobId,
-      summary,
-    );
-    // The renders have just been written under the job's name. They belong to
-    // whoever started it, whether or not this preview is ever saved.
-    await this.access.grant('file', storedEvidenceUrls(summary), ownerId);
-    return { job, summary };
+    return { job, summary: await this.severityQueue.summary(jobId) };
   }
 
   /** One photograph's evidence packet from a preview job, for the viewer. */
   async severityJobPacket(jobId: string, key: string, ownerId: string) {
     await this.access.require('job', jobId, ownerId);
-    const evidence = await this.severityService.evidence(jobId);
+    const evidence = await this.severityQueue.evidence(jobId);
     return this.pickPacket(evidence, key);
   }
 
@@ -523,11 +508,14 @@ export class DetectionsService {
   }
 
   /**
-   * Where the analysis has got to, and — once it finishes — the assessment.
+   * Where a saved screening's analysis has got to, and the assessment once it
+   * is finished.
    *
-   * The result is collected here, on the first poll that finds the job done,
-   * rather than pushed by the analyser. The analyser holds jobs in memory and
-   * forgets them; the gateway is what makes a result durable.
+   * The worker writes the result into the screening the moment the analysis
+   * ends, so this only reads. One case is handled here: a screening still
+   * marked as waiting whose job the queue no longer knows — the queue was
+   * emptied, or the job predates it. That analysis can never finish, so the
+   * screening says so instead of waiting forever.
    */
   async severityStatus(
     id: string,
@@ -542,79 +530,52 @@ export class DetectionsService {
       return { detection, job: null };
     }
 
-    let job: SeverityJob;
-    try {
-      job = await this.severityService.status(detection.phase2JobId);
-    } catch (error) {
-      // The analyser being unreachable does not mean the analysis failed. Leave
-      // the screening as it is so a restarted service can still be polled.
-      this.logger.warn(
-        `could not reach the severity service for ${id}: ${String(error)}`,
-      );
-      throw error;
-    }
-
-    if (job.status === 'failed') {
+    const job = await this.severityQueue.describe(detection.phase2JobId);
+    if (!job) {
       detection.phase2Status = 'failed';
-      detection.phase2Error = job.error ?? 'the analysis failed';
+      detection.phase2Error =
+        'The analysis was interrupted and can no longer be followed. Run it again.';
       detection.phase2At = new Date();
       return { detection: await this.detectionRepository.save(detection), job };
     }
-
-    if (job.status !== 'done') {
-      detection.phase2Status = job.status;
-      return { detection, job };
-    }
-
-    const analysed = await this.collectSeverity(detection, job);
-    await this.audit.record({
-      actorId: ownerId,
-      action: 'severity.completed',
-      subjectType: 'screening',
-      subjectId: analysed.id,
-      subjectLabel: this.label(analysed),
-      detail: `Severity analysis finished — ${analysed.severity ?? 'unknown'}`,
-    });
-    return { detection: analysed, job };
+    return { detection, job };
   }
 
-  /** Pulls a finished analysis into the record: assessment, evidence, images. */
-  private async collectSeverity(
+  /**
+   * Attaches a finished preview to the screening being saved: the assessment
+   * the doctor already looked at, not a second run.
+   *
+   * The renders are already in storage under the job's name and already
+   * granted to this doctor. The packets are copied to the screening's own key,
+   * so the nightly cleanup can clear the job's files without touching the record.
+   */
+  private async attachPreview(
     detection: Detection,
-    job: SeverityJob,
+    jobId: string,
   ): Promise<Detection> {
-    const jobId = job.jobId;
-    const summary = (await this.severityService.result(
-      jobId,
-    )) as unknown as Record<string, unknown>;
+    const job = await this.severityQueue.describe(jobId);
+    if (job?.status !== 'done') {
+      throw new Error(`job ${jobId} is ${job?.status ?? 'unknown'}, not done`);
+    }
 
-    // Keep our own copy of the rendered evidence: the job expires, the record
-    // does not. Named after the job rather than the screening, so a preview that
-    // is later saved reuses the very files the doctor was already looking at
-    // instead of writing a second copy under a new name.
-    await storeEvidenceImages(
-      this.storage,
-      this.severityService,
-      jobId,
-      jobId,
-      summary,
-    );
-    await this.access.grant(
-      'file',
-      storedEvidenceUrls(summary),
-      detection.ownerId,
-    );
-
+    const summary = await this.severityQueue.summary(jobId);
     const patient = (summary.patient ?? {}) as {
       severity?: Severity;
       urgent?: boolean;
     };
 
+    detection.phase2EvidenceKey = null;
+    try {
+      const packets = await this.severityQueue.evidenceBytes(jobId);
+      const key = evidenceKey(detection.id);
+      await this.storage.put(key, packets, 'application/json');
+      detection.phase2EvidenceKey = key;
+    } catch (error) {
+      // The packets only drive the overlay viewer; the grading still stands.
+      this.logger.warn(`no packets for preview ${jobId}: ${String(error)}`);
+    }
+
     detection.phase2Summary = summary;
-    detection.phase2EvidenceKey = await this.storeEvidencePackets(
-      detection.id,
-      jobId,
-    );
     detection.phase2Evidence = null;
     detection.severity = patient.severity ?? 'unknown';
     detection.severityUrgent = Boolean(patient.urgent);
@@ -627,31 +588,6 @@ export class DetectionsService {
         : null;
 
     return this.detectionRepository.save(detection);
-  }
-
-  /**
-   * Fetches the per-photograph packets from the analyser and keeps them in
-   * storage, one JSON object per screening.
-   *
-   * The assessment is what the app shows; the packets only drive the overlay
-   * viewer. Losing them must not lose the grading, so a failure here is logged
-   * and the screening is saved without them.
-   */
-  private async storeEvidencePackets(
-    detectionId: string,
-    jobId: string,
-  ): Promise<string | null> {
-    try {
-      const packets = await this.severityService.evidence(jobId);
-      const key = evidenceKey(detectionId);
-      await this.storage.put(key, JSON.stringify(packets), 'application/json');
-      return key;
-    } catch (error) {
-      this.logger.warn(
-        `evidence packets unavailable for ${detectionId}: ${String(error)}`,
-      );
-      return null;
-    }
   }
 
   /** The per-photograph packets, fetched only when the evidence viewer opens.

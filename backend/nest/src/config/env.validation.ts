@@ -35,5 +35,13 @@ export function validateEnv(config: Record<string, unknown>) {
     );
   }
 
+  const redis = config.REDIS_URL;
+  if (typeof redis !== 'string' || !/^rediss?:\/\//.test(redis.trim())) {
+    throw new Error(
+      'REDIS_URL is not set. Background jobs are queued in Redis ' +
+        '(docker-compose.yml). See backend/nest/.env.example.',
+    );
+  }
+
   return config;
 }

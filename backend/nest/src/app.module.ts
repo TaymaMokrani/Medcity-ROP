@@ -11,6 +11,8 @@ import { AccessModule } from './access/access.module';
 import { AuditModule } from './audit/audit.module';
 import { FilesModule } from './files/files.module';
 import { StorageModule } from './storage/storage.module';
+import { QueueModule } from './queue/queue.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 import { validateEnv } from './config/env.validation';
 import { buildDataSourceOptions } from './database/data-source-options';
 @Module({
@@ -25,6 +27,7 @@ import { buildDataSourceOptions } from './database/data-source-options';
       inject: [ConfigService],
     }),
     StorageModule,
+    QueueModule,
     AccessModule,
     AuditModule,
     AuthModule,
@@ -33,6 +36,7 @@ import { buildDataSourceOptions } from './database/data-source-options';
     DetectionsModule,
     WorkspaceModule,
     FilesModule,
+    MaintenanceModule,
   ],
   controllers: [AppController],
 })

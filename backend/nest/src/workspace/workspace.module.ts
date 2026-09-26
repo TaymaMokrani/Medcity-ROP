@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { SeverityModule } from '../severity/severity.module';
+import { DetectionsModule } from '../detections/detections.module';
 import { WorkspaceController } from './workspace.controller';
 
 @Module({
-  imports: [SeverityModule],
+  imports: [DetectionsModule],
   controllers: [WorkspaceController],
 })
 export class WorkspaceModule {}

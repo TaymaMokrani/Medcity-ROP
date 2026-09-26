@@ -17,7 +17,7 @@ import { AccessService } from '../access/access.service';
 import { keepInMemory, type EyeFiles } from '../detections/upload.config';
 import { StorageService } from '../storage/storage.service';
 import { RENDER_PREFIX } from '../storage/keys';
-import { SeverityService } from '../severity/severity.service';
+import { SeverityQueueService } from '../detections/severity-queue.service';
 import { WORKSPACE_FIELDS, workspaceUploads } from './workspace-files';
 
 /** A render name the gateway stored under `severity/`: no paths, no dots first. */
@@ -38,7 +38,7 @@ const EVIDENCE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(jpg|jpeg|png)$/i;
 @UseGuards(JwtAuthGuard)
 export class WorkspaceController {
   constructor(
-    private readonly severityService: SeverityService,
+    private readonly severityQueue: SeverityQueueService,
     private readonly access: AccessService,
     private readonly storage: StorageService,
   ) {}
@@ -50,9 +50,10 @@ export class WorkspaceController {
     @UploadedFiles() files: EyeFiles,
     @CurrentUser() user: AuthUser,
   ) {
-    const job = await this.severityService.startFromFiles(
+    const job = await this.severityQueue.enqueuePreview(
       workspaceUploads(files),
       'workspace',
+      user.id,
     );
     // The same grant the detection flow writes. It is what the shared polling
     // routes check, so without it the Workspace could not read back the job it

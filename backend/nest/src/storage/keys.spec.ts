@@ -1,4 +1,11 @@
-import { evidenceKey, isOwnedKey, isSafeName, newPhotoKey } from './keys';
+import {
+  evidenceKey,
+  isOwnedKey,
+  isSafeName,
+  jobSummaryKey,
+  newPhotoKey,
+  stagingKey,
+} from './keys';
 
 describe('storage keys', () => {
   it('names a new photograph by a fresh id, keeping only a known extension', () => {
@@ -30,5 +37,10 @@ describe('storage keys', () => {
     expect(isOwnedKey('other/abc.jpg')).toBe(false);
     expect(isOwnedKey('detections/../x.jpg')).toBe(false);
     expect(isOwnedKey('/uploads/detections/abc.jpg')).toBe(false);
+    expect(isOwnedKey(stagingKey('j1', 'Left', 0, 'x.JPG'))).toBe(true);
+    expect(isOwnedKey(jobSummaryKey('j1'))).toBe(true);
+    expect(isOwnedKey('jobs/j1')).toBe(false);
+    expect(isOwnedKey('jobs/j1/../x.json')).toBe(false);
+    expect(isOwnedKey('detections/a/b.jpg')).toBe(false);
   });
 });
