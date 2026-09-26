@@ -1,0 +1,52 @@
+{
+  "model": "linear_regression_least_squares",
+  "features": [
+    "f_iclc",
+    "f_diam"
+  ],
+  "weights": [
+    0.17792265107474334,
+    0.09989013020519806
+  ],
+  "intercept": 0.20537124802527662,
+  "standardise_mean": [
+    0.020141745250358827,
+    3.9765891350300935
+  ],
+  "standardise_std": [
+    0.001273432247324668,
+    0.19297601801656872
+  ],
+  "target": "plus_disease 0=none 1=pre-plus 2=plus (SINGLE grader)",
+  "tort_stat": "cti_p90",
+  "n_eyes": 633,
+  "n_patients": 255,
+  "oof_mse": 0.25224741036915066,
+  "oof_mae": 0.3397717777760423,
+  "oof_auc_plus": 0.882641030292037,
+  "oof_auc_preplus_or_worse": 0.7519115890083632,
+  "limitation": "target is a 3-level single-grader label; published inter-expert kappa on this task is 0.29-0.71, so part of the error is the label and cannot be separated out with one grader",
+  "cut_plus": {
+    "cut": 0.325,
+    "sensitivity": 0.892,
+    "specificity": 0.758,
+    "ppv": 0.186,
+    "auc": 0.883,
+    "tp": 33,
+    "fn": 4,
+    "fp": 144,
+    "tn": 452
+  },
+  "cut_preplus": {
+    "cut": 0.221,
+    "sensitivity": 0.796,
+    "specificity": 0.596,
+    "ppv": 0.253,
+    "auc": 0.752,
+    "tp": 74,
+    "fn": 19,
+    "fp": 218,
+    "tn": 322
+  },
+  "cut_note": "cut_plus / cut_preplus are the operating points. They were printed by fit_plus_index.py but never saved, so a service could not turn a score into a grade. Recomputed 2026-09-02 with the same features, weights and patient-split out-of-fold procedure on the same 633 eye-visits / 255 patients. Note the low PPV: at cut_plus the score flags 177 eyes to catch 33. That is the screening trade deliberately chosen - missing plus disease is far worse than a second look."
+}

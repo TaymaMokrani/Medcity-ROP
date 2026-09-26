@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="MedCity ROP">
+  <rect width="32" height="32" rx="8" fill="#05070c"/>
+  <!-- the eye, drawn the way the product mark is: one light source in the dark -->
+  <path d="M4.5 16C7.7 10.8 11.6 8.2 16 8.2s8.3 2.6 11.5 7.8c-3.2 5.2-7.1 7.8-11.5 7.8S7.7 21.2 4.5 16Z"
+        fill="none" stroke="#38bdf8" stroke-width="2" stroke-linejoin="round" opacity="0.85"/>
+  <circle cx="16" cy="16" r="3.6" fill="#38bdf8"/>
+</svg>

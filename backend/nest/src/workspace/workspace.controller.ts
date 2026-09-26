@@ -1,0 +1,98 @@
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  StreamableFile,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { createReadStream, existsSync } from 'fs';
+import { extname, join } from 'path';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
+import { AccessService } from '../access/access.service';
+import { keepInMemory, type EyeFiles } from '../detections/upload.config';
+import {
+  SEVERITY_UPLOAD_DIR,
+  SEVERITY_URL_PREFIX,
+} from '../detections/severity-storage';
+import { SeverityService } from '../severity/severity.service';
+import { WORKSPACE_FIELDS, workspaceUploads } from './workspace-files';
+
+/** A file name the gateway wrote into the severity folder: no paths, no dots first. */
+const EVIDENCE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(jpg|jpeg|png)$/i;
+
+/**
+ * The Vessel Workspace: vessel measurements without an examination.
+ *
+ * A doctor imports photographs and studies the vessels. Nothing is written to
+ * the database. The job it starts is polled through the same preview routes
+ * the detection flow uses (`/detections/severity-jobs/:jobId`), so the only
+ * things this adds are an upload that accepts a single photograph, and a way to
+ * read an evidence image that a canvas is allowed to export.
+ */
+@ApiTags('workspace')
+@ApiBearerAuth()
+@Controller('workspace')
+@UseGuards(JwtAuthGuard)
+export class WorkspaceController {
+  constructor(
+    private readonly severityService: SeverityService,
+    private readonly access: AccessService,
+  ) {}
+
+  @Post('analyze')
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileFieldsInterceptor(WORKSPACE_FIELDS, keepInMemory))
+  async analyze(
+    @UploadedFiles() files: EyeFiles,
+    @CurrentUser() user: AuthUser,
+  ) {
+    const job = await this.severityService.startFromFiles(
+      workspaceUploads(files),
+      'workspace',
+    );
+    // The same grant the detection flow writes. It is what the shared polling
+    // routes check, so without it the Workspace could not read back the job it
+    // just started — and with it, nobody else can either.
+    await this.access.grant('job', job.jobId, user.id);
+    return { jobId: job.jobId, status: job.status };
+  }
+
+  /**
+   * One rendered evidence image, served so a canvas may export it.
+   *
+   * `/uploads/severity/:name` serves the same file, but as an opaque download
+   * for an `<img>`; a canvas that has drawn it can only be exported when the
+   * response carried CORS headers, which is what this route is for.
+   *
+   * Same check as the file route, and it is not optional. This used to serve
+   * any name in the severity folder to any signed-in doctor, on the reasoning
+   * that the file was public under the static route anyway. The static route
+   * is gone, and that reasoning went with it.
+   */
+  @Get('evidence-image/:name')
+  async evidenceImage(
+    @Param('name') name: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StreamableFile> {
+    if (!EVIDENCE_NAME.test(name)) {
+      throw new BadRequestException('Not an evidence image name');
+    }
+    await this.access.require('file', `${SEVERITY_URL_PREFIX}${name}`, user.id);
+
+    const path = join(SEVERITY_UPLOAD_DIR, name);
+    if (!existsSync(path)) {
+      throw new NotFoundException('No such evidence image');
+    }
+    const type =
+      extname(name).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+    return new StreamableFile(createReadStream(path), { type });
+  }
+}

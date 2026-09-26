@@ -1,0 +1,197 @@
+
+.input-field {
+    position: relative;
+    display: grid;
+    width: 100%;
+    height: 40px;
+    transition: 0.3s ease all;
+}
+
+.input-field input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px 0 36px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 10px;
+}
+
+.input-field label {
+    position: absolute;
+    cursor: text;
+    top: 50%;
+    left: 38px;
+    transform: translateY(-50%);
+    padding: 0 4px;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.66);
+    pointer-events: none;
+    transition: 0.3s ease all;
+}
+
+.input-field input[data-empty="false"] + label,
+.input-field input:focus + label {
+    top: 0;
+    left: 12px;
+    font-size: 12px;
+    color: #000;
+    background: #fff;
+}
+
+.input-field .icon {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 2;
+}
+
+.input-field .toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    transform: translateY(-50%);
+    z-index: 2;
+    border-radius: 8px;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.2s ease;
+}
+
+.input-field .toggle:hover,
+.input-field .toggle:focus-visible {
+    opacity: 1;
+}
+
+.input-field input:-webkit-autofill,
+.input-field input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset;
+    -webkit-text-fill-color: #000;
+    caret-color: #000;
+    transition: background-color 100000s ease-in-out 0s;
+}
+
+.input-field[data-dark="true"] input {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+
+.input-field[data-dark="true"] label {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.input-field[data-dark="true"] .icon {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.input-field[data-dark="true"] .toggle {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.input-field[data-dark="true"] input[data-empty="false"] + label,
+.input-field[data-dark="true"] input:focus + label {
+    top: -18px;
+    left: 12px;
+    transform: none;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    color: rgba(255, 255, 255, 0.55);
+    background: transparent;
+}
+
+.input-field[data-dark="true"] input:-webkit-autofill,
+.input-field[data-dark="true"] input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #171b23 inset;
+    -webkit-text-fill-color: #fff;
+    caret-color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.input-strength {
+    width: 100%;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.input-field:focus-within .input-strength {
+    opacity: 1;
+}
+
+.input-field:has(.input-strength):focus-within {
+    height: 135px;
+}
+
+.input-strength .bars {
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+    width: 100%;
+    height: 8px;
+    margin-top: 5px;
+}
+
+.input-strength progress {
+    width: 100%;
+    height: 8px;
+    margin-top: 0;
+    background: #f1f1f1;
+    border-radius: 50px;
+    overflow: hidden;
+}
+
+.input-field[data-dark="true"] .input-strength progress {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.input-strength progress:nth-child(1)::-webkit-progress-value {
+    background: linear-gradient(90deg, rgb(255, 77, 0), rgb(255, 123, 0));
+    transition: 0.3s ease all;
+}
+
+.input-strength progress:nth-child(2)::-webkit-progress-value {
+    background: linear-gradient(90deg, rgb(255, 123, 0), rgb(224, 255, 47));
+    transition: 0.3s ease all;
+}
+
+.input-strength progress:nth-child(3)::-webkit-progress-value {
+    background: linear-gradient(90deg, rgb(224, 255, 47), rgb(0, 201, 57));
+    transition: 0.3s ease all;
+}
+
+.input-strength .rules {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.input-strength .rule {
+    display: flex;
+    gap: 7px;
+    font-size: 13px;
+}
+
+.input-strength .rule .check {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 100%;
+    color: #fff;
+    background: rgb(203, 203, 203);
+    transition: 0.3s ease all;
+}
+
+.input-field[data-dark="true"] .input-strength .rule .check {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.input-strength .rule[data-met="true"] .check {
+    background: rgb(6, 169, 0);
+}

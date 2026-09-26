@@ -1,0 +1,30 @@
+{
+  "tortuosity_measure": "cti",
+  "tortuosity_gt": 1.045547,
+  "diameter_p90_gt": 6.818,
+  "rule": "quadrant abnormal if tortuosity>T and diameter>D; 0=normal 1=pre-plus >=2=PLUS",
+  "folds": [
+    [
+      1.045547,
+      6.073
+    ],
+    [
+      1.045547,
+      8.035
+    ],
+    [
+      1.058972,
+      6.818
+    ],
+    [
+      1.058972,
+      6.073
+    ],
+    [
+      1.045547,
+      8.035
+    ]
+  ],
+  "n_calibration_eyes": 188,
+  "n_patients": 114
+}

@@ -1,0 +1,24 @@
+#   docker compose up -d
+#   DATABASE_URL=postgres://medcity:medcity@localhost:5432/medcity
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medcity-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: medcity
+      POSTGRES_PASSWORD: medcity
+      POSTGRES_DB: medcity
+    ports:
+      - "5432:5432"
+    volumes:
+      - medcity-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medcity -d medcity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  medcity-pgdata:

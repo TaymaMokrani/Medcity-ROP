@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'Display';
+  src: url('./fonts/Display.woff2');
+}
+
+@font-face {
+  font-family: 'Heading';
+  src: url('./fonts/Heading.woff2');
+}
+
+@font-face {
+  font-family: 'Body';
+  src: url('./fonts/Body.woff2');
+}

@@ -1,0 +1,378 @@
+@import "tailwindcss";
+/* Geist is the landing page's font and is not used by the app. */
+@import "@fontsource-variable/geist";
+
+@theme inline {
+    --font-sans: 'Geist Variable', sans-serif;
+    /* The three uploaded faces. `body` is the app's reading font. */
+    --font-body: 'Body', 'Geist Variable', sans-serif;
+    --font-heading: 'Heading', 'Geist Variable', sans-serif;
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-border: var(--border);
+    --color-ring: var(--ring);
+
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+
+    --color-brand-void: #121212;
+    --color-brand-cyan: #38bdf8;
+    --shadow-glow-btn: 0 0 15px rgba(14, 165, 233, 0.5);
+
+    /* ------------------------------------------------------------------
+     * The landing page's palette. Untouched: the landing is out of scope.
+     * ------------------------------------------------------------------ */
+    --color-medcity-void: #05070c;
+    --color-medcity-surface: #0e141f;
+    --color-medcity-cyan: #38bdf8;
+    --color-medcity-cyan-deep: #0ea5e9;
+    --color-medcity-ice: #eaf2fb;
+    --color-medcity-muted: #8a97a8;
+    --color-medcity-line: rgba(180, 210, 245, 0.1);
+
+    --shadow-medcity-cta: 0 0 0 1px rgba(255, 255, 255, 0.04),
+        0 18px 50px -18px rgba(56, 189, 248, 0.55),
+        0 2px 8px -2px rgba(0, 0, 0, 0.6);
+
+    /* ------------------------------------------------------------------
+     * The app's palette. One set of names, two themes: the light app and
+     * the dark Workspace. Every screen draws from these and nothing else,
+     * so a colour is decided once rather than per component.
+     *
+     * Not included on purpose, because they carry meaning of their own:
+     * the vessel heat scale, and the Phase 1 risk ramp.
+     * ------------------------------------------------------------------ */
+    --color-bg: var(--app-bg);
+    --color-panel: var(--app-panel);
+    --color-inset: var(--app-inset);
+    --color-line: var(--app-line);
+    --color-line-soft: var(--app-line-soft);
+
+    --color-ink: var(--app-ink);
+    --color-ink-2: var(--app-ink-2);
+    --color-ink-3: var(--app-ink-3);
+    --color-accent: var(--app-accent);
+
+    /* The four clinical states. `unresolved` sits off the traffic light:
+     * an eye that could not be measured is not a mild eye. */
+    --color-urgent: var(--app-urgent);
+    --color-urgent-line: var(--app-urgent-line);
+    --color-urgent-wash: var(--app-urgent-wash);
+    --color-watch: var(--app-watch);
+    --color-watch-line: var(--app-watch-line);
+    --color-watch-wash: var(--app-watch-wash);
+    --color-steady: var(--app-steady);
+    --color-steady-line: var(--app-steady-line);
+    --color-steady-wash: var(--app-steady-wash);
+    --color-unresolved: var(--app-unresolved);
+    --color-unresolved-line: var(--app-unresolved-line);
+    --color-unresolved-wash: var(--app-unresolved-wash);
+
+    /* One size ladder. Nothing in the app sets a size outside it. */
+    --text-micro: 0.6875rem;
+    --text-micro--line-height: 1.45;
+    --text-label: 0.75rem;
+    --text-label--line-height: 1.45;
+    --text-body: 0.875rem;
+    --text-body--line-height: 1.55;
+    --text-lead: 0.9375rem;
+    --text-lead--line-height: 1.6;
+    --text-title: 1.25rem;
+    --text-title--line-height: 1.25;
+    --text-display: 1.875rem;
+    --text-display--line-height: 1.1;
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --border: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --radius: 0.625rem;
+}
+
+/* Light: the app. The dashboard's paper, now everywhere.
+ * `.theme-light` is the same set, for a light panel nested inside the dark
+ * rail — the shell is dark, the page inside it is not. */
+:root,
+.theme-light {
+    --app-bg: #f7f9fc;
+    --app-panel: #ffffff;
+    --app-inset: #eef2f7;
+    --app-line: #e2e8f0;
+    --app-line-soft: #eef1f4;
+
+    --app-ink: #0f172a;
+    --app-ink-2: #475569;
+    --app-ink-3: #5b6b81;
+    --app-accent: #40607a;
+
+    --app-urgent: #9a2a1e;
+    --app-urgent-line: #d9b3ad;
+    --app-urgent-wash: #fbf3f1;
+    --app-watch: #8a5a16;
+    --app-watch-line: #c09553;
+    --app-watch-wash: #faf6ee;
+    --app-steady: #33684f;
+    --app-steady-line: #8fae9d;
+    --app-steady-wash: #f4f7f5;
+    --app-unresolved: #4b5473;
+    --app-unresolved-line: #8d95ad;
+    --app-unresolved-wash: #f4f5f9;
+
+    /* Controls, per theme, so one Button serves both. */
+    --app-primary-bg: #0f172a;
+    --app-primary-ink: #ffffff;
+    --app-primary-line: #0f172a;
+    --app-primary-bg-hover: #1e293b;
+    --app-quiet-bg: transparent;
+    --app-field-bg: #ffffff;
+    --app-focus: #40607a;
+}
+
+/* Dark: the Vessel Workspace. Same names, so components do not change. */
+.theme-dark {
+    --app-bg: #05070c;
+    --app-panel: #0e141f;
+    --app-inset: rgba(255, 255, 255, 0.04);
+    --app-line: rgba(180, 210, 245, 0.12);
+    --app-line-soft: rgba(180, 210, 245, 0.07);
+
+    --app-ink: #eaf2fb;
+    --app-ink-2: #b8c6d8;
+    --app-ink-3: #8a97a8;
+    --app-accent: #38bdf8;
+
+    --app-urgent: #fca5a5;
+    --app-urgent-line: rgba(248, 113, 113, 0.4);
+    --app-urgent-wash: rgba(248, 113, 113, 0.1);
+    --app-watch: #fcd34d;
+    --app-watch-line: rgba(251, 191, 36, 0.4);
+    --app-watch-wash: rgba(251, 191, 36, 0.1);
+    --app-steady: #86efac;
+    --app-steady-line: rgba(74, 222, 128, 0.4);
+    --app-steady-wash: rgba(74, 222, 128, 0.1);
+    --app-unresolved: #c4b5fd;
+    --app-unresolved-line: rgba(167, 139, 250, 0.4);
+    --app-unresolved-wash: rgba(167, 139, 250, 0.1);
+
+    --app-primary-bg: rgba(56, 189, 248, 0.15);
+    --app-primary-ink: #eaf2fb;
+    --app-primary-line: rgba(56, 189, 248, 0.4);
+    --app-primary-bg-hover: rgba(56, 189, 248, 0.25);
+    --app-quiet-bg: transparent;
+    --app-field-bg: rgba(255, 255, 255, 0.03);
+    --app-focus: #38bdf8;
+
+    color-scheme: dark;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    html {
+        @apply font-sans;
+    }
+}
+
+@layer utilities {
+    .medcity-halo {
+        background: radial-gradient(
+            closest-side,
+            rgba(56, 189, 248, 0.28),
+            rgba(56, 189, 248, 0.08) 45%,
+            transparent 72%
+        );
+    }
+}
+
+@keyframes medcity-halo-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.85; }
+    50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes medcity-comet {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+}
+
+.medcity-comet {
+    animation: medcity-comet 5s linear infinite;
+    will-change: stroke-dashoffset;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .medcity-halo, .medcity-comet { animation: none !important; }
+    .medcity-comet { opacity: 0; }
+    .medcity-comet:first-of-type { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+ * The scan, shown while the model reads a set of photographs.
+ *
+ * A retina with a beam going round it. The wait is only a few seconds, but a
+ * still icon during it reads as a page that has stopped, and a plain spinner
+ * says nothing about what is being waited on.
+ * ------------------------------------------------------------------------ */
+@keyframes rop-scan-sweep {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes rop-scan-ring {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.65; }
+}
+
+@keyframes rop-scan-dot {
+    0%, 100% { opacity: 0.2; transform: scale(1); }
+    40% { opacity: 1; transform: scale(1.4); }
+}
+
+.rop-scan-sweep {
+    transform-origin: 80px 80px;
+    animation: rop-scan-sweep 2.4s linear infinite;
+    will-change: transform;
+}
+
+.rop-scan-ring {
+    animation: rop-scan-ring 2.4s ease-in-out infinite;
+}
+
+.rop-scan-dot {
+    animation: rop-scan-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .rop-scan-sweep, .rop-scan-ring, .rop-scan-dot {
+        animation: none !important;
+    }
+    .rop-scan-dot { opacity: 0.6; }
+}
+
+/* A quiet slider, in whichever theme it is dropped into. */
+.rop-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    /* 24px: the smallest target the standard allows. */
+    height: 1.5rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+.rop-slider::-webkit-slider-runnable-track {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background: linear-gradient(
+        to right,
+        var(--app-accent) 0 var(--rop-slider-fill, 50%),
+        var(--app-line) var(--rop-slider-fill, 50%) 100%
+    );
+}
+
+.rop-slider::-moz-range-track {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background: var(--app-line);
+}
+
+.rop-slider::-moz-range-progress {
+    height: 0.25rem;
+    border-radius: 9999px;
+    background: var(--app-accent);
+}
+
+.rop-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 0.875rem;
+    height: 0.875rem;
+    margin-top: -0.3125rem;
+    border-radius: 9999px;
+    background: var(--app-panel);
+    border: 1px solid var(--app-accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    transition: box-shadow 150ms ease;
+}
+
+.rop-slider::-moz-range-thumb {
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 9999px;
+    background: var(--app-panel);
+    border: 1px solid var(--app-accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    transition: box-shadow 150ms ease;
+}
+
+.rop-slider:hover::-webkit-slider-thumb,
+.rop-slider:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 22%, transparent);
+}
+
+.rop-slider:hover::-moz-range-thumb,
+.rop-slider:focus-visible::-moz-range-thumb {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--app-accent) 22%, transparent);
+}
+
+.rop-slider:focus {
+    outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus
+ *
+ * One visible ring for the whole app. Nothing turns focus off: a clinician
+ * working from the keyboard has to be able to see where they are.
+ * ------------------------------------------------------------------------ */
+@layer base {
+    .app-scope :focus-visible {
+        outline: 2px solid var(--app-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
+    }
+}
+
+/*
+ * The app's own scrollbar.
+ *
+ * The panel is a rounded card, and the platform's scrollbar drew a grey strip
+ * with square corners straight over its right edge. This one is a thin thumb
+ * floating inside the card, with no track at all, so the card keeps its border
+ * and its corners. The gutter is reserved so nothing shifts when it appears.
+ */
+.app-scroll {
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, currentColor 22%, transparent) transparent;
+}
+
+.app-scroll::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.app-scroll::-webkit-scrollbar-track,
+.app-scroll::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+.app-scroll::-webkit-scrollbar-thumb {
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-color: color-mix(in srgb, currentColor 20%, transparent);
+    background-clip: padding-box;
+}
+
+.app-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, currentColor 34%, transparent);
+}
