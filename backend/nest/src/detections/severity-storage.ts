@@ -1,16 +1,6 @@
-import { existsSync, mkdirSync } from 'fs';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
 import type { SeverityService } from '../severity/severity.service';
-
-export const SEVERITY_UPLOAD_DIR = join(process.cwd(), 'uploads', 'severity');
-export const SEVERITY_URL_PREFIX = '/uploads/severity/';
-
-export function ensureSeverityDir(): void {
-  if (!existsSync(SEVERITY_UPLOAD_DIR)) {
-    mkdirSync(SEVERITY_UPLOAD_DIR, { recursive: true });
-  }
-}
+import type { StorageService } from '../storage/storage.service';
+import { RENDER_PREFIX } from '../storage/keys';
 
 interface EvidenceBlock {
   map?: string;
@@ -18,39 +8,40 @@ interface EvidenceBlock {
   photos?: { image?: string }[];
 }
 
-/** A name the severity service produced, pinned to one file in our own folder. */
+/** A name the severity service produced, pinned to one safe object name. */
 function localName(detectionId: string, name: string): string {
   return `${detectionId}-${name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
 }
 
 /**
- * Copies the rendered evidence into the gateway's own uploads folder and rewrites
- * the assessment to point at it.
+ * Copies the rendered evidence into object storage and rewrites the assessment
+ * to point at it.
  *
  * The frontend talks only to the gateway, and severity jobs are held in the
  * Python service's memory and expire. Keeping our own copy means the evidence
  * outlives the job, and survives the analyser being restarted.
  *
  * Best effort per image: one that cannot be fetched is dropped from the
- * assessment rather than left as a URL that will 404 in the viewer.
+ * assessment rather than left as a key that will 404 in the viewer.
  */
 export async function storeEvidenceImages(
+  storage: StorageService,
   severity: SeverityService,
   jobId: string,
   detectionId: string,
   summary: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  ensureSeverityDir();
-
   const eyes = Array.isArray(summary.eyes) ? summary.eyes : [];
   const missing: string[] = [];
 
   const fetchOne = async (name: string): Promise<string | undefined> => {
+    // Already ours: a preview that was stored once and is now being saved.
+    if (name.startsWith(RENDER_PREFIX)) return name;
     try {
       const bytes = await severity.image(jobId, name);
-      const filename = localName(detectionId, name);
-      await writeFile(join(SEVERITY_UPLOAD_DIR, filename), bytes);
-      return `${SEVERITY_URL_PREFIX}${filename}`;
+      const key = `${RENDER_PREFIX}${localName(detectionId, name)}`;
+      await storage.put(key, bytes);
+      return key;
     } catch {
       missing.push(name);
       return undefined;
@@ -84,7 +75,7 @@ export async function storeEvidenceImages(
   return summary;
 }
 
-/** Every evidence file a detection points at, so a delete takes them with it. */
+/** Every evidence render a detection points at, so a delete takes them with it. */
 export function storedEvidenceUrls(
   summary: Record<string, unknown> | null,
 ): string[] {
@@ -96,10 +87,10 @@ export function storedEvidenceUrls(
     const evidence = eye?.evidence;
     if (!evidence) continue;
     for (const value of [evidence.map, evidence.front]) {
-      if (value?.startsWith(SEVERITY_URL_PREFIX)) urls.add(value);
+      if (value?.startsWith(RENDER_PREFIX)) urls.add(value);
     }
     for (const photo of evidence.photos ?? []) {
-      if (photo?.image?.startsWith(SEVERITY_URL_PREFIX)) urls.add(photo.image);
+      if (photo?.image?.startsWith(RENDER_PREFIX)) urls.add(photo.image);
     }
   }
   return [...urls];

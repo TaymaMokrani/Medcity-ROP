@@ -33,12 +33,14 @@ function detection(overrides: Partial<Detection> = {}): Detection {
     ],
     notes: '',
     doctorDecision: 'Confirms ROP',
-    decidedAt: '2026-09-20T10:00:00.000Z',
-    createdAt: '2026-09-20',
+    decidedAt: new Date('2026-09-20T10:00:00.000Z'),
+    createdAt: new Date('2026-09-20T09:00:00.000Z'),
+    modelVersion: 'v1-2026-08',
     phase2Status: 'done',
     phase2JobId: 'job-1',
     phase2Error: null,
-    phase2At: '2026-09-20T10:05:00.000Z',
+    phase2At: new Date('2026-09-20T10:05:00.000Z'),
+    phase2Version: 'v1-2026-09',
     severity: 'severe',
     severityUrgent: true,
     phase2Summary: null,
@@ -97,7 +99,9 @@ describe('FHIR export', () => {
 
     expect(bundle.resourceType).toBe('Bundle');
     expect(bundle.type).toBe('collection');
-    expect(resources(bundle).filter((r) => r.resourceType === 'Patient')).toHaveLength(1);
+    expect(
+      resources(bundle).filter((r) => r.resourceType === 'Patient'),
+    ).toHaveLength(1);
     expect(
       resources(bundle).filter((r) => r.resourceType === 'DiagnosticReport'),
     ).toHaveLength(1);
@@ -136,7 +140,9 @@ describe('FHIR export', () => {
     expect(JSON.stringify(left?.note)).toContain('18.0%');
 
     const right = observation(bundle, 'DET-1-risk-right');
-    expect(JSON.stringify(right?.interpretation)).toContain('Below the referral');
+    expect(JSON.stringify(right?.interpretation)).toContain(
+      'Below the referral',
+    );
   });
 
   it('exports an unassessable zone as absent with a reason, never as normal', () => {

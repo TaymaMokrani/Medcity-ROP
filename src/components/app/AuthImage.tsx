@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
  * A photograph, fetched with the session's token.
  *
  * Everywhere a retinal photograph or an evidence render is shown. It looks
- * like an `<img>` and takes the same props, but `src` is the stored path the
- * record holds — `/uploads/detections/…` — not something the browser can load
- * on its own. See `lib/assets.ts` for why.
+ * like an `<img>` and takes the same props, but `src` is the storage key the
+ * record holds — `detections/…` — not something the browser can load on its
+ * own. See `lib/assets.ts` for why.
  *
  * Three states, and the third one matters: a picture that failed says so.
  * An empty frame where a retina should be reads as "this eye looks clear",

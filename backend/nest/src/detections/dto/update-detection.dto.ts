@@ -13,10 +13,6 @@ export class UpdateDetectionDto {
 
   @IsString()
   @IsOptional()
-  patientName?: string;
-
-  @IsString()
-  @IsOptional()
   date?: string;
 
   @IsIn(EYE_SELECTIONS)

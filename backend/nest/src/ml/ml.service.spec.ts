@@ -71,6 +71,7 @@ describe('MlService', () => {
         flagged: true,
         threshold: 0.098,
         baseRate: 0.3546,
+        modelVersion: 'v1-2026-08',
       });
     });
 

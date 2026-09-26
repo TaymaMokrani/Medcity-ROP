@@ -5,9 +5,6 @@ export class CreateDetectionDto {
   patientId: string;
 
   @IsString()
-  patientName: string;
-
-  @IsString()
   date: string;
 
   @IsIn(EYE_SELECTIONS)

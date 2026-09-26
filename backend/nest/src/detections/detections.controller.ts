@@ -12,7 +12,10 @@ import {
   NotFoundException,
   UseInterceptors,
   UploadedFiles,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { PageQueryDto, sendTotal } from '../common/page';
 import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -22,12 +25,7 @@ import { CreateDetectionDto } from './dto/create-detection.dto';
 import { UpdateDetectionDto } from './dto/update-detection.dto';
 import { AnalyzeDetectionDto } from './dto/analyze-detection.dto';
 import { ExaminerRecordDto } from './dto/examiner-record.dto';
-import {
-  EYE_FIELDS,
-  keepInMemory,
-  saveToDisk,
-  type EyeFiles,
-} from './upload.config';
+import { EYE_FIELDS, keepInMemory, type EyeFiles } from './upload.config';
 
 @ApiTags('detections')
 @ApiBearerAuth()
@@ -39,12 +37,15 @@ export class DetectionsController {
   @Get()
   async findAll(
     @CurrentUser() user: AuthUser,
+    @Query() page: PageQueryDto,
+    @Res({ passthrough: true }) response: Response,
     @Query('patientId') patientId?: string,
   ) {
-    if (patientId) {
-      return this.detectionsService.findByPatient(patientId, user.id);
-    }
-    return this.detectionsService.findAll(user.id);
+    const [detections, total] = patientId
+      ? await this.detectionsService.findByPatient(patientId, user.id, page)
+      : await this.detectionsService.findAll(user.id, page);
+    sendTotal(response, total);
+    return detections;
   }
 
   @Get(':id')
@@ -133,7 +134,7 @@ export class DetectionsController {
 
   @Post()
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileFieldsInterceptor(EYE_FIELDS, saveToDisk))
+  @UseInterceptors(FileFieldsInterceptor(EYE_FIELDS, keepInMemory))
   async create(
     @UploadedFiles() files: EyeFiles,
     @Body() dto: CreateDetectionDto,

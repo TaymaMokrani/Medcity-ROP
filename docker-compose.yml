@@ -1,5 +1,15 @@
-#   docker compose up -d
-#   DATABASE_URL=postgres://medcity:medcity@localhost:5432/medcity
+# Local infrastructure: the PostgreSQL database, MinIO object storage for the
+# photographs, and pgAdmin to look at the database.
+#
+#   docker compose up -d      start both, in the background
+#   docker compose ps         see what is running
+#   docker compose down       stop both (the data is kept in the volume)
+#
+# Credentials come from the .env file next to this one (see .env.example).
+# The gateway connects with DATABASE_URL in backend/nest/.env, which must use
+# the same user, password and database name.
+#
+# Both ports are bound to 127.0.0.1, so only this machine can reach them.
 
 services:
   postgres:
@@ -7,18 +17,70 @@ services:
     container_name: medcity-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: medcity
-      POSTGRES_PASSWORD: medcity
-      POSTGRES_DB: medcity
+      POSTGRES_USER: ${POSTGRES_USER:-medcity}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-medcity}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - medcity-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U medcity -d medcity"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # Object storage for photographs and evidence: the same API as Amazon S3,
+  # so the gateway's code runs unchanged against S3 or any S3-compatible
+  # store in production. Nothing in the database points at a disk path.
+  #   API      http://localhost:9000  (the gateway talks to this)
+  #   console  http://localhost:9001  (a web page to browse the files)
+  # MinIO stopped publishing its free images in 2025 (minio/minio is gone from
+  # Docker Hub). pgsty/minio is the community-maintained build of the same
+  # server: same API, same settings, same console. Pinned, never "latest".
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: medcity-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-medcity}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - medcity-objects:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # A web interface for the database: http://localhost:5050
+  # Development only. Desktop mode means no pgAdmin login of its own; the server
+  # below is already listed and asks for the database password on first connect.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: medcity-pgadmin
+    restart: unless-stopped
+    environment:
+      # Never used to log in (desktop mode), but pgAdmin refuses to start
+      # unless it looks like a real address — `.local` is rejected.
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - medcity-pgadmin:/var/lib/pgadmin
+      - ./docker/pgadmin-servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   medcity-pgdata:
+  medcity-pgadmin:
+  medcity-objects:

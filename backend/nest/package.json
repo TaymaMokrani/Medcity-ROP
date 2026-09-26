@@ -16,9 +16,13 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
-    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/database/data-source.ts"
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/database/data-source.ts",
+    "db:copy-from-pglite": "ts-node src/database/copy-from-pglite.ts",
+    "db:backup": "node scripts/db-backup.mjs",
+    "storage:copy-from-disk": "ts-node src/storage/copy-uploads-to-storage.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
     "@electric-sql/pglite": "^0.4.6",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",

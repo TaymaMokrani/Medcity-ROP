@@ -229,7 +229,7 @@ export function startWorkspaceAnalysis(images: { left: File[]; right: File[] }) 
 
 /**
  * An evidence image as a local blob, so a canvas that draws it may be exported.
- * `/uploads/severity/:name` serves the same file, but for an `<img>` to show.
+ * `/files/severity/:name` serves the same file, but for an `<img>` to show.
  * A canvas that has drawn it can only be exported when the response carried
  * CORS headers, which this route does and that one does not.
  */

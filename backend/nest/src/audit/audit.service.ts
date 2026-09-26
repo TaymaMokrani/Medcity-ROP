@@ -52,7 +52,7 @@ export class AuditService {
         subjectId: input.subjectId ?? null,
         subjectLabel: input.subjectLabel ?? null,
         detail: input.detail ?? null,
-        at: new Date().toISOString(),
+        at: new Date(),
       });
     } catch (error) {
       this.logger.error(

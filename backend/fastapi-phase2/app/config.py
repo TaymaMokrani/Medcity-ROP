@@ -16,6 +16,11 @@ MODEL_DIR = Path(os.getenv("PHASE2_MODEL_DIR", BASE_DIR / "models"))
 VESSEL_WEIGHTS = MODEL_DIR / os.getenv("VESSEL_WEIGHTS_FILE", "vessel_model_simple.pth")
 OD_WEIGHTS = MODEL_DIR / os.getenv("OD_WEIGHTS_FILE", "od_unet_resnet34.pt")
 
+# Which pipeline produced a result. Stored with every assessment so a grading can
+# always be traced to the models and rules that made it. Change it whenever the
+# weights, the calibration or the grading rule change.
+PIPELINE_VERSION = os.getenv("PHASE2_PIPELINE_VERSION", "v1-2026-09")
+
 CALIBRATION_DIR = BASE_DIR / "calibration"
 WORK_DIR = Path(os.getenv("PHASE2_WORK_DIR", BASE_DIR / "work"))
 

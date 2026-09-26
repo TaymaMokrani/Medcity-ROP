@@ -5,6 +5,7 @@ import { Patient } from './patient.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { generateId } from '../common/id';
+import type { Page } from '../common/page';
 import { applyChanges } from '../common/apply-changes';
 import { DetectionsService } from '../detections/detections.service';
 import { AuditService } from '../audit/audit.service';
@@ -22,10 +23,16 @@ export class PatientsService {
     return `${patient.firstName} ${patient.lastName}`.trim();
   }
 
-  async findAll(ownerId: string): Promise<Patient[]> {
-    return this.patientRepository.find({
+  /** Newest first. With no page asked for, the whole list, as before. */
+  async findAll(
+    ownerId: string,
+    page: Page = {},
+  ): Promise<[Patient[], number]> {
+    return this.patientRepository.findAndCount({
       where: { ownerId },
       order: { createdAt: 'DESC' },
+      take: page.limit,
+      skip: page.offset,
     });
   }
 
@@ -42,7 +49,6 @@ export class PatientsService {
       status: dto.status ?? 'Active',
       id: generateId('PAT'),
       ownerId,
-      createdAt: new Date().toISOString().split('T')[0],
     });
     const saved = await this.patientRepository.save(patient);
 

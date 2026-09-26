@@ -159,6 +159,11 @@ def analyse_patient(pipe, eyes: Dict[str, List[str]], out_dir: str,
 
     result = {
         "schema_version": SCHEMA_VERSION,
+        "pipeline_version": config.PIPELINE_VERSION,
+        "models": {
+            "vessel": config.VESSEL_WEIGHTS.name,
+            "optic_disc": config.OD_WEIGHTS.name,
+        },
         "generated_at": started,
         "seconds": round(time.time() - started, 1),
         "provisional": True,

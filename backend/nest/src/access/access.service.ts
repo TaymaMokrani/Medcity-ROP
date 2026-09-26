@@ -41,7 +41,7 @@ export class AccessService {
           kind,
           key,
           ownerId,
-          createdAt: new Date().toISOString(),
+          createdAt: new Date(),
         })),
       )
       // A preview analysis that the doctor later saves reuses the very files

@@ -8,7 +8,11 @@ import {
   Param,
   UseGuards,
   NotFoundException,
+  Query,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
+import { PageQueryDto, sendTotal } from '../common/page';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
@@ -24,8 +28,14 @@ export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 
   @Get()
-  async findAll(@CurrentUser() user: AuthUser) {
-    return this.patientsService.findAll(user.id);
+  async findAll(
+    @CurrentUser() user: AuthUser,
+    @Query() page: PageQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const [patients, total] = await this.patientsService.findAll(user.id, page);
+    sendTotal(response, total);
+    return patients;
   }
 
   @Get(':id')

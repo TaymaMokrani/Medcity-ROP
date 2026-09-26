@@ -18,6 +18,8 @@ React (:3000)  ──HTTP──▶  NestJS gateway (:4000)  ──internal──
 | --- | --- | --- |
 | Frontend (React + Vite) | Forms, image upload, rendering results. No medical logic. | Working |
 | Gateway (NestJS + TypeORM) | Identity, ownership, validation, database, uploads. Sole caller of the ML service. | Working |
+| PostgreSQL | Patients, screenings, results, access grants, activity log. | Docker (`docker-compose.yml`) |
+| Object storage (MinIO / S3) | Retinal photographs, evidence renders, measurement packets. | Docker (`docker-compose.yml`) |
 | ML service (FastAPI) | Loads the model, runs inference. | Working — see [backend/fastapi/README.md](backend/fastapi/README.md) |
 
 The gateway calls the ML service at `ML_SERVICE_URL`. There is no fallback: with
@@ -28,7 +30,22 @@ deployment does.
 
 ## Running it
 
-Requires [Bun](https://bun.sh). No database server needed.
+Requires [Bun](https://bun.sh) and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+```bash
+# once: copy the settings and fill in the passwords (see the comments inside)
+cp .env.example .env
+cp backend/nest/.env.example backend/nest/.env
+
+# the database, the object storage and pgAdmin
+docker compose up -d
+docker compose ps            # postgres and minio should say (healthy)
+```
+
+| What | Where |
+| --- | --- |
+| pgAdmin (look inside the database) | <http://localhost:5050> — password: `POSTGRES_PASSWORD` in `.env` |
+| MinIO console (look at the stored files) | <http://localhost:9001> — `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` in `.env` |
 
 The gateway starts the ML service for you (`ML_SERVICE_AUTOSTART=true`), so one
 terminal is enough. Install the Python dependencies once first — see
@@ -37,7 +54,6 @@ terminal is enough. Install the Python dependencies once first — see
 ```bash
 # gateway — starts the ML service alongside it
 cd backend/nest
-cp .env.example .env
 # generate a signing key and paste it into JWT_SECRET:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 bun install
@@ -45,7 +61,6 @@ bun run start:dev            # http://localhost:4000/api
 
 # frontend, in a second terminal
 cd ../..
-cp .env.example .env
 bun install
 bun run dev                  # http://localhost:3000
 ```
@@ -63,9 +78,35 @@ Live API docs: <http://localhost:4000/api/docs>.
 
 | Value | Behaviour |
 | --- | --- |
-| `pglite://./data` | Embedded Postgres persisted to `./data`. **Default** — no server to install. |
+| `postgres://user:pass@host:5432/db` | The PostgreSQL server from `docker-compose.yml`. **Default.** |
+| `pglite://./data` | Embedded Postgres persisted to `./data`. Quick tests only. |
 | `pglite` | Embedded Postgres in memory. Wiped on every restart. |
-| `postgres://user:pass@host:5432/db` | A real PostgreSQL server (`docker compose up -d`). |
+
+Foreign keys tie every patient, screening and grant to its owner, and every
+screening to its patient; all are `RESTRICT`, so deleting goes through the
+services, which remove the files first. `npm run db:backup` writes a full dump
+to `backend/nest/backups/` (ignored by git).
+
+## File storage
+
+Photographs are never kept on the gateway's disk and the database never holds a
+path. Each file is an object in a private bucket, and the record holds its
+**key**:
+
+| Key | What |
+| --- | --- |
+| `detections/<uuid>.jpg` | a photograph the doctor uploaded |
+| `severity/<job>-<name>.jpg` | an evidence image the severity analysis rendered |
+| `evidence/<screening id>.json` | the per-photograph measurement packets |
+
+The bucket speaks the Amazon S3 API. Locally it is the MinIO container; in
+production, point `STORAGE_ENDPOINT` and the keys at Amazon S3 or any
+S3-compatible store and nothing else changes. The browser never reaches the
+bucket: `GET /api/files/<key>` streams a file after checking the bearer token
+and the doctor's access grant.
+
+Moving an older install from the `uploads/` folder: `bun run
+storage:copy-from-disk` in `backend/nest` (copies, verifies, deletes nothing).
 
 The schema is owned by migrations, not by the entity classes — `synchronize` is
 off. Pending migrations run at boot, so a fresh clone comes up correctly.
@@ -76,8 +117,6 @@ cd backend/nest
 bun run migration:generate src/database/migrations/DescribeYourChange
 bun run migration:run
 ```
-
-Stop the gateway first: PGlite holds a lock on its data directory.
 
 ## Where the verdict comes from
 

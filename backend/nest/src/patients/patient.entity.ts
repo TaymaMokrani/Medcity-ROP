@@ -1,4 +1,13 @@
-import { Entity, Column, PrimaryColumn, Index } from 'typeorm';
+import {
+  Entity,
+  Column,
+  CreateDateColumn,
+  PrimaryColumn,
+  Index,
+  JoinColumn,
+  ManyToOne,
+} from 'typeorm';
+import { User } from '../users/user.entity';
 
 @Entity('patients')
 export class Patient {
@@ -6,8 +15,15 @@ export class Patient {
   id: string;
 
   @Index()
-  @Column()
+  @Column('uuid')
   ownerId: string;
+
+  @ManyToOne(() => User, { onDelete: 'RESTRICT' })
+  @JoinColumn({
+    name: 'ownerId',
+    foreignKeyConstraintName: 'FK_patients_owner',
+  })
+  owner?: User;
 
   @Column()
   firstName: string;
@@ -15,7 +31,8 @@ export class Patient {
   @Column()
   lastName: string;
 
-  @Column()
+  /** `date` in Postgres, read back as "YYYY-MM-DD". */
+  @Column('date')
   dateOfBirth: string;
 
   @Column()
@@ -48,6 +65,6 @@ export class Patient {
   @Column()
   status: string;
 
-  @Column()
-  createdAt: string;
+  @CreateDateColumn({ type: 'timestamptz' })
+  createdAt: Date;
 }

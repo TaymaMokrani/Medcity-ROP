@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Controller,
   Get,
-  NotFoundException,
   Param,
   Post,
   StreamableFile,
@@ -12,20 +11,16 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { createReadStream, existsSync } from 'fs';
-import { extname, join } from 'path';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { AccessService } from '../access/access.service';
 import { keepInMemory, type EyeFiles } from '../detections/upload.config';
-import {
-  SEVERITY_UPLOAD_DIR,
-  SEVERITY_URL_PREFIX,
-} from '../detections/severity-storage';
+import { StorageService } from '../storage/storage.service';
+import { RENDER_PREFIX } from '../storage/keys';
 import { SeverityService } from '../severity/severity.service';
 import { WORKSPACE_FIELDS, workspaceUploads } from './workspace-files';
 
-/** A file name the gateway wrote into the severity folder: no paths, no dots first. */
+/** A render name the gateway stored under `severity/`: no paths, no dots first. */
 const EVIDENCE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(jpg|jpeg|png)$/i;
 
 /**
@@ -45,6 +40,7 @@ export class WorkspaceController {
   constructor(
     private readonly severityService: SeverityService,
     private readonly access: AccessService,
+    private readonly storage: StorageService,
   ) {}
 
   @Post('analyze')
@@ -68,7 +64,7 @@ export class WorkspaceController {
   /**
    * One rendered evidence image, served so a canvas may export it.
    *
-   * `/uploads/severity/:name` serves the same file, but as an opaque download
+   * `/files/severity/:name` serves the same file, but as an opaque download
    * for an `<img>`; a canvas that has drawn it can only be exported when the
    * response carried CORS headers, which is what this route is for.
    *
@@ -85,14 +81,13 @@ export class WorkspaceController {
     if (!EVIDENCE_NAME.test(name)) {
       throw new BadRequestException('Not an evidence image name');
     }
-    await this.access.require('file', `${SEVERITY_URL_PREFIX}${name}`, user.id);
+    const key = `${RENDER_PREFIX}${name}`;
+    await this.access.require('file', key, user.id);
 
-    const path = join(SEVERITY_UPLOAD_DIR, name);
-    if (!existsSync(path)) {
-      throw new NotFoundException('No such evidence image');
-    }
-    const type =
-      extname(name).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-    return new StreamableFile(createReadStream(path), { type });
+    const file = await this.storage.open(key);
+    return new StreamableFile(file.stream, {
+      type: file.contentType,
+      length: file.length,
+    });
   }
 }

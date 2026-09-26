@@ -6,8 +6,6 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFile } from 'fs/promises';
-import { basename } from 'path';
 import type { Eye, Phase2Status, Severity } from '../detections/rop';
 
 /** A photograph the doctor has uploaded but not yet committed to a screening. */
@@ -75,33 +73,12 @@ export class SeverityService {
   }
 
   /**
-   * Starts an analysis from files already on disk.
+   * Starts an analysis from photographs held in memory: an upload the doctor
+   * has not saved yet, or a saved screening's photographs read back from
+   * storage.
    *
    * Laterality is carried by which field each photograph is posted under. It is
    * never inferred from the image, here or in the service.
-   */
-  async start(
-    imagesByEye: Partial<Record<Eye, string[]>>,
-    reference: string,
-  ): Promise<SeverityJob> {
-    const loaded: Partial<Record<Eye, UploadedImage[]>> = {};
-    for (const eye of Object.keys(imagesByEye) as Eye[]) {
-      loaded[eye] = await Promise.all(
-        (imagesByEye[eye] ?? []).map(async (path) => ({
-          buffer: await readFile(path),
-          originalname: basename(path),
-        })),
-      );
-    }
-    return this.startFromFiles(loaded, reference);
-  }
-
-  /**
-   * Starts an analysis from files that are still in memory.
-   *
-   * This is the path the create flow uses: the doctor has uploaded photographs
-   * but has not committed the screening yet, so there is nothing on disk and no
-   * record to hang a job off.
    */
   async startFromFiles(
     imagesByEye: Partial<Record<Eye, UploadedImage[]>>,

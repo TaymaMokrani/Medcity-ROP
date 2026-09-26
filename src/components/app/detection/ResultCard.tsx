@@ -17,9 +17,9 @@ import AuthImage from "../AuthImage";
 export interface Thumbnail {
     key: string;
     /**
-     * A stored path (`/uploads/detections/…`) for a saved screening, or a
+     * A storage key (`detections/…`) for a saved screening, or a
      * local `blob:` URL for one still being filled in. `AuthImage` takes
-     * either: a stored path is fetched with the session's token, a blob is
+     * either: a storage key is fetched with the session's token, a blob is
      * already in the browser and is passed straight through.
      */
     src: string;

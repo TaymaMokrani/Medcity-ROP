@@ -1,20 +1,11 @@
-import { basename, join } from 'path';
-import { unlink } from 'fs/promises';
 import type { Detection } from './detection.entity';
-import { UPLOAD_DIR, URL_PREFIX } from './upload.config';
-import {
-  SEVERITY_UPLOAD_DIR,
-  SEVERITY_URL_PREFIX,
-  storedEvidenceUrls,
-} from './severity-storage';
+import { storedEvidenceUrls } from './severity-storage';
 
-/** Which folder a URL belongs to. Anything not listed here is not ours to delete. */
-const OWNED: [prefix: string, dir: string][] = [
-  [URL_PREFIX, UPLOAD_DIR],
-  [SEVERITY_URL_PREFIX, SEVERITY_UPLOAD_DIR],
-];
-
-/** Every distinct file a detection points at, uploads and evidence alike. */
+/**
+ * Every distinct served file a detection points at, uploads and evidence
+ * renders alike. These are object-storage keys (`detections/<uuid>.jpg`), and
+ * the same strings are the keys of their access grants.
+ */
 export function storedImageUrls(detection: Detection): string[] {
   const urls = new Set<string>();
   if (detection.image) urls.add(detection.image);
@@ -26,17 +17,10 @@ export function storedImageUrls(detection: Detection): string[] {
   return [...urls];
 }
 
-export async function removeStoredImages(urls: string[]): Promise<void> {
-  await Promise.all(
-    urls.map(async (url) => {
-      const owner = OWNED.find(([prefix]) => url.startsWith(prefix));
-      if (!owner) return;
-      // basename pins the target inside the folder whatever the URL contains
-      try {
-        await unlink(join(owner[1], basename(url)));
-      } catch {
-        // already gone, or not ours to delete
-      }
-    }),
-  );
+/** Everything in storage that goes when the detection does: the files above
+ * plus its measurement packets, which are stored but never served as a file. */
+export function storedObjectKeys(detection: Detection): string[] {
+  const keys = storedImageUrls(detection);
+  if (detection.phase2EvidenceKey) keys.push(detection.phase2EvidenceKey);
+  return keys;
 }

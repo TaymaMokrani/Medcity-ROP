@@ -1,0 +1,13 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "MedCity",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "medcity",
+      "Username": "medcity",
+      "SSLMode": "prefer"
+    }
+  }
+}

@@ -18,5 +18,22 @@ export function validateEnv(config: Record<string, unknown>) {
     );
   }
 
+  const storage = [
+    'STORAGE_ENDPOINT',
+    'STORAGE_BUCKET',
+    'STORAGE_ACCESS_KEY',
+    'STORAGE_SECRET_KEY',
+  ].filter((key) => {
+    const value = config[key];
+    return typeof value !== 'string' || value.trim().length === 0;
+  });
+  if (storage.length) {
+    throw new Error(
+      `Object storage is not configured: ${storage.join(', ')} missing. ` +
+        'Photographs are kept in object storage (MinIO locally), not on disk. ' +
+        'See backend/nest/.env.example.',
+    );
+  }
+
   return config;
 }

@@ -28,7 +28,11 @@ silently fall back to.
 | --- | --- | --- |
 | `JWT_SECRET` | — | **Required.** ≥32 chars. |
 | `JWT_EXPIRES_IN` | `7d` | Token lifetime. |
-| `DATABASE_URL` | `pglite://./data` | `pglite://<dir>`, `pglite` (memory), or a `postgres://` URL. |
+| `DATABASE_URL` | — | `postgres://` URL of the server in `docker-compose.yml`. `pglite://<dir>` or `pglite` for quick tests. |
+| `STORAGE_ENDPOINT` | — | **Required.** S3 API of the object storage. MinIO locally: `http://127.0.0.1:9000`. |
+| `STORAGE_BUCKET` | — | **Required.** Created at boot if missing. |
+| `STORAGE_ACCESS_KEY` / `STORAGE_SECRET_KEY` | — | **Required.** Locally the `MINIO_ROOT_*` values from the root `.env`. |
+| `STORAGE_REGION` | `us-east-1` | Only matters for Amazon S3. |
 | `PORT` | `4000` | |
 | `CORS_ORIGINS` | `http://localhost:3000` | Comma-separated. No wildcard — requests carry credentials. |
 | `ML_SERVICE_URL` | *(empty)* | Set once FastAPI exists; empty uses the local placeholder. |
@@ -41,6 +45,8 @@ silently fall back to.
 | `users` | Account persistence. |
 | `patients` | Patient CRUD, owner-scoped. Deleting cascades to that patient's screenings. |
 | `detections` | Screening CRUD, image upload, and the ROP vocabulary (`rop.ts`). |
+| `storage` | The only client of object storage (S3 API): put, stream, delete. Key naming in `keys.ts`. |
+| `files` | `GET /files/<key>`: streams a stored file after checking the access grant. |
 | `ml` | The single point of contact with the ML layer. |
 | `database` | Connection options shared by the app and the CLI, plus the migrations. |
 | `common` | Shared id generation. |
@@ -60,7 +66,7 @@ bun run migration:run       # or restart the app
 bun run migration:revert    # undo the last one
 ```
 
-Stop the gateway first — PGlite locks its data directory and the CLI needs it.
+With PGlite, stop the gateway first: it locks its data directory.
 
 `src/database/data-source-options.ts` is the single definition of the
 connection, used by both Nest and the CLI. Keeping one copy is what stops

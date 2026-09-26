@@ -47,6 +47,9 @@ lerna-debug.log*
 # embedded PGlite database files — patient data, same rule
 /data
 
+# database backups (npm run db:backup) — patient data, same rule
+/backups
+
 # temp directory
 .temp
 .tmp

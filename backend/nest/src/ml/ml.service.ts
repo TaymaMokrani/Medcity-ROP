@@ -6,7 +6,6 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFile } from 'fs/promises';
 import type { Eye } from '../detections/rop';
 
 export interface EyePrediction {
@@ -14,6 +13,8 @@ export interface EyePrediction {
   flagged: boolean;
   threshold: number;
   baseRate: number;
+  /** Which model answered. Absent only if the service did not say. */
+  modelVersion?: string;
 }
 
 export interface ClinicalInput {
@@ -27,6 +28,7 @@ interface MlServiceResponse {
   flagged: boolean;
   threshold: number;
   base_rate: number;
+  model_version?: string;
 }
 
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -36,14 +38,6 @@ export class MlService {
   private readonly logger = new Logger(MlService.name);
 
   constructor(private readonly config: ConfigService) {}
-
-  async predictFromPaths(
-    paths: string[],
-    clinical: ClinicalInput,
-  ): Promise<EyePrediction> {
-    const images = await Promise.all(paths.map((path) => readFile(path)));
-    return this.predict(images, clinical);
-  }
 
   async predict(
     images: Buffer[],
@@ -118,6 +112,8 @@ export class MlService {
       flagged: body.flagged!,
       threshold: body.threshold!,
       baseRate: body.base_rate!,
+      modelVersion:
+        typeof body.model_version === 'string' ? body.model_version : undefined,
     };
   }
 

@@ -5,15 +5,12 @@ import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
 import { HttpExceptionFilter } from './common/http-exception.filter';
-import { ensureUploadDir } from './detections/upload.config';
-import { ensureSeverityDir } from './detections/severity-storage';
+import { TOTAL_COUNT_HEADER } from './common/page';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
-  ensureUploadDir();
-  ensureSeverityDir();
   app.setGlobalPrefix('api');
 
   app.enableShutdownHooks();
@@ -21,10 +18,10 @@ async function bootstrap() {
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
 
-  // Photographs are NOT served as static assets. `useStaticAssets` asks for no
-  // token and knows no owner, so anyone with a URL could download a patient's
-  // retina. They are served by FilesController instead, which requires a
-  // bearer token and a grant naming the doctor the file belongs to.
+  // Photographs live in object storage (MinIO locally, S3 in production), in
+  // a private bucket. The browser never reaches it: FilesController streams a
+  // file only after checking the bearer token and a grant naming the doctor
+  // the file belongs to.
 
   app.enableCors({
     origin: (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:3000')
@@ -32,6 +29,8 @@ async function bootstrap() {
       .map((origin) => origin.trim())
       .filter(Boolean),
     credentials: true,
+    // A browser hides response headers from scripts unless they are listed.
+    exposedHeaders: [TOTAL_COUNT_HEADER],
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
@@ -44,8 +43,8 @@ async function bootstrap() {
         'logic and persistence, and is the sole caller of the FastAPI ML service. ' +
         'Every route except /health and /auth/* requires a bearer token, and ' +
         'every record, file and analysis job is scoped to the doctor who owns ' +
-        'it. Photographs are served by /uploads/* against an access grant, ' +
-        'never as static files.',
+        'it. Photographs are kept in object storage and served by /files/* ' +
+        'against an access grant, never as static files.',
     )
     .setVersion('0.1.0')
     .addBearerAuth()

@@ -69,11 +69,12 @@ async function request<T>(
 /**
  * Where a stored photograph is fetched from.
  *
- * It is an API route now, not a static file. The gateway stopped serving the
- * uploads folder: a retinal photograph is patient data, and a URL that any
- * browser could open — or guess — is not an acceptable way to keep it. The
- * route asks for the same bearer token as everything else and checks that the
- * file belongs to the doctor asking.
+ * A record holds a storage key — `detections/<uuid>.jpg` — not a path or a
+ * URL. The photograph lives in object storage behind the gateway, and the
+ * gateway's `/files/<key>` route streams it after checking the same bearer
+ * token as everything else and that the file belongs to the doctor asking. A
+ * retinal photograph is patient data; there is no URL that opens it without
+ * that check.
  *
  * That means the result cannot go straight into `<img src>`, because an image
  * element sends no Authorization header. Use `useAsset` or `AuthImage`, which
@@ -82,7 +83,7 @@ async function request<T>(
 export function assetUrl(path: string): string {
   if (!path) return '';
   if (/^(https?:|data:|blob:)/i.test(path)) return path;
-  return `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${BASE_URL}/files/${path.replace(/^\/+/, '')}`;
 }
 
 export function errorMessage(error: unknown, fallback = 'Something went wrong.'): string {

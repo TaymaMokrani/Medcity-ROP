@@ -54,7 +54,7 @@ function service() {
 
 const DOCTOR_A = 'doctor-a';
 const DOCTOR_B = 'doctor-b';
-const PHOTO = '/uploads/detections/1795000000000-123456789.jpg';
+const PHOTO = 'detections/1795000000000-123456789.jpg';
 
 describe('AccessService', () => {
   it('lets the owner read what was granted to them', async () => {
@@ -79,7 +79,7 @@ describe('AccessService', () => {
 
   it('refuses a file nobody has been granted', async () => {
     const { access } = service();
-    // The file is on disk; no grant was ever written for it. It is unreadable,
+    // The file is in storage; no grant was ever written for it. It is unreadable,
     // including by the doctor who would otherwise own it. That is the safe way
     // round: a file that arrives by some route other than an upload is not
     // quietly public.

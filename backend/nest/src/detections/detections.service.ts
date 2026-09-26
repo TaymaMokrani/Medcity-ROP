@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { basename, join } from 'path';
 import {
   Detection,
   REQUIRED_IMAGES_PER_EYE,
@@ -34,9 +33,9 @@ import {
   type Severity,
   type Zone,
 } from './rop';
-import { removeStoredImages, storedImageUrls } from './detection-storage';
+import { storedImageUrls, storedObjectKeys } from './detection-storage';
 import { storeEvidenceImages, storedEvidenceUrls } from './severity-storage';
-import { UPLOAD_DIR, URL_PREFIX, type EyeFiles } from './upload.config';
+import type { EyeFiles } from './upload.config';
 import { MlService, type EyePrediction } from '../ml/ml.service';
 import {
   SeverityService,
@@ -45,9 +44,12 @@ import {
 } from '../severity/severity.service';
 import { ExaminerRecordDto } from './dto/examiner-record.dto';
 import { generateId } from '../common/id';
+import type { Page } from '../common/page';
 import { AccessService } from '../access/access.service';
 import { AuditService } from '../audit/audit.service';
 import { buildFhirBundle, type FhirBundle } from './fhir';
+import { StorageService } from '../storage/storage.service';
+import { evidenceKey, newPhotoKey, PHOTO_PREFIX } from '../storage/keys';
 
 const GESTATIONAL_AGE_MIN = 20;
 const GESTATIONAL_AGE_MAX = 45;
@@ -69,6 +71,7 @@ export class DetectionsService {
     private readonly severityService: SeverityService,
     private readonly access: AccessService,
     private readonly audit: AuditService,
+    private readonly storage: StorageService,
   ) {}
 
   /** How a screening reads in the activity log once the record itself is gone. */
@@ -76,10 +79,16 @@ export class DetectionsService {
     return `${detection.patientName} — ${detection.date}`;
   }
 
-  async findAll(ownerId: string): Promise<Detection[]> {
-    return this.detectionRepository.find({
+  /** Newest first. With no page asked for, the whole list, as before. */
+  async findAll(
+    ownerId: string,
+    page: Page = {},
+  ): Promise<[Detection[], number]> {
+    return this.detectionRepository.findAndCount({
       where: { ownerId },
       order: { createdAt: 'DESC' },
+      take: page.limit,
+      skip: page.offset,
     });
   }
 
@@ -90,10 +99,13 @@ export class DetectionsService {
   async findByPatient(
     patientId: string,
     ownerId: string,
-  ): Promise<Detection[]> {
-    return this.detectionRepository.find({
+    page: Page = {},
+  ): Promise<[Detection[], number]> {
+    return this.detectionRepository.findAndCount({
       where: { patientId, ownerId },
       order: { createdAt: 'DESC' },
+      take: page.limit,
+      skip: page.offset,
     });
   }
 
@@ -167,22 +179,26 @@ export class DetectionsService {
       );
     }
 
-    return { gestationalAge, ageWeeks: Math.round(ageWeeks * 100) / 100 };
+    return {
+      gestationalAge,
+      ageWeeks: Math.round(ageWeeks * 100) / 100,
+      patientName: `${patient.firstName} ${patient.lastName}`.trim(),
+    };
   }
 
   private async scoreEye(
     eye: Eye,
-    images: { buffer?: Buffer; path?: string }[],
+    images: { buffer: Buffer }[],
     clinical: { gestationalAge: number; ageWeeks: number },
   ): Promise<EyePrediction> {
-    const input = { eye, ...clinical };
-    const paths = images.map((file) => file.path).filter(Boolean) as string[];
-    return paths.length === images.length
-      ? this.mlService.predictFromPaths(paths, input)
-      : this.mlService.predict(
-          images.map((file) => file.buffer as Buffer),
-          input,
-        );
+    return this.mlService.predict(
+      images.map((file) => file.buffer),
+      {
+        eye,
+        gestationalAge: clinical.gestationalAge,
+        ageWeeks: clinical.ageWeeks,
+      },
+    );
   }
 
   private toAnalysis(
@@ -195,6 +211,7 @@ export class DetectionsService {
       risk: prediction.risk,
       flagged: prediction.flagged,
       threshold: prediction.threshold,
+      modelVersion: prediction.modelVersion,
       images,
     };
   }
@@ -228,17 +245,28 @@ export class DetectionsService {
 
     const clinical = await this.clinicalFor(dto.patientId, ownerId, dto.date);
 
-    const images: DetectionImage[] = EYES.flatMap((eye) =>
-      byEye[eye].map((file) => ({ url: `${URL_PREFIX}${file.filename}`, eye })),
+    // Scored from memory before anything is stored, so a refused or failed
+    // analysis leaves no orphaned photographs behind.
+    const predictions = await Promise.all(
+      screenedEyes.map((eye) => this.scoreEye(eye, byEye[eye], clinical)),
     );
 
-    const eyeResults: EyeAnalysis[] = await Promise.all(
-      screenedEyes.map(async (eye) =>
-        this.toAnalysis(
-          eye,
-          await this.scoreEye(eye, byEye[eye], clinical),
-          images.filter((image) => image.eye === eye).map((i) => i.url),
-        ),
+    // Then each photograph goes to object storage under a fresh key. The key,
+    // not a path on this machine, is what the record keeps.
+    const images: DetectionImage[] = [];
+    for (const eye of EYES) {
+      for (const file of byEye[eye]) {
+        const key = newPhotoKey(file.originalname);
+        await this.storage.put(key, file.buffer, file.mimetype);
+        images.push({ url: key, eye });
+      }
+    }
+
+    const eyeResults: EyeAnalysis[] = screenedEyes.map((eye, index) =>
+      this.toAnalysis(
+        eye,
+        predictions[index],
+        images.filter((image) => image.eye === eye).map((i) => i.url),
       ),
     );
 
@@ -257,12 +285,16 @@ export class DetectionsService {
       image: images[0]?.url ?? '',
       images,
       eyeResults,
+      // Every eye is scored by the same service in the same request.
+      modelVersion: eyeResults[0]?.modelVersion ?? null,
       doctorDecision: 'Pending',
       decidedAt: null,
-      createdAt: new Date().toISOString().split('T')[0],
     });
+    // Not a stored column: loads read it from the patient. Set here so the
+    // reply and the activity log have it before the row is read back.
+    detection.patientName = clinical.patientName;
 
-    // The photographs on disk get an owner of their own. Until this row
+    // The stored photographs get an owner of their own. Until this row
     // exists the file route serves them to nobody, so granting is part of
     // saving a screening rather than an afterthought.
     await this.access.grant(
@@ -336,19 +368,24 @@ export class DetectionsService {
     return detection;
   }
 
-  /** The stored photographs of each screened eye, as paths on disk. */
-  private storedPathsPerEye(
+  /** The stored photographs of each screened eye, read back from storage. */
+  private async storedPhotosPerEye(
     detection: Detection,
-  ): Partial<Record<Eye, string[]>> {
-    const perEye: Partial<Record<Eye, string[]>> = {};
+  ): Promise<Partial<Record<Eye, UploadedImage[]>>> {
+    const perEye: Partial<Record<Eye, UploadedImage[]>> = {};
     for (const eye of eyesFor(detection.eye)) {
-      const paths = (detection.images ?? [])
+      const keys = (detection.images ?? [])
         .filter(
-          (image) => image.eye === eye && image.url.startsWith(URL_PREFIX),
+          (image) => image.eye === eye && image.url.startsWith(PHOTO_PREFIX),
         )
-        // basename pins each file inside the upload folder whatever the URL says
-        .map((image) => join(UPLOAD_DIR, basename(image.url)));
-      if (paths.length) perEye[eye] = paths;
+        .map((image) => image.url);
+      if (!keys.length) continue;
+      perEye[eye] = await Promise.all(
+        keys.map(async (key) => ({
+          buffer: await this.storage.read(key),
+          originalname: key.slice(PHOTO_PREFIX.length),
+        })),
+      );
     }
     return perEye;
   }
@@ -371,7 +408,7 @@ export class DetectionsService {
       return detection;
     }
 
-    const perEye = this.storedPathsPerEye(detection);
+    const perEye = await this.storedPhotosPerEye(detection);
     if (!Object.keys(perEye).length) {
       throw new BadRequestException(
         'This screening has no stored photographs to measure. Only screenings ' +
@@ -379,7 +416,7 @@ export class DetectionsService {
       );
     }
 
-    const job = await this.severityService.start(perEye, detection.id);
+    const job = await this.severityService.startFromFiles(perEye, detection.id);
     await this.access.grant('job', job.jobId, ownerId);
 
     detection.phase2Status = job.status;
@@ -439,8 +476,7 @@ export class DetectionsService {
   /**
    * A preview job's progress, and its assessment once it is done.
    *
-   * Rendered evidence is written to the gateway's uploads folder under the job
-   * id, so the viewer can show it before anything is saved. Files left behind by
+   * Rendered evidence is written to object storage under the job id, so the viewer can show it before anything is saved. Files left behind by
    * a preview the doctor abandons are the price of not making them commit first.
    */
   async severityJob(jobId: string, ownerId: string) {
@@ -452,7 +488,13 @@ export class DetectionsService {
     const summary = (await this.severityService.result(
       jobId,
     )) as unknown as Record<string, unknown>;
-    await storeEvidenceImages(this.severityService, jobId, jobId, summary);
+    await storeEvidenceImages(
+      this.storage,
+      this.severityService,
+      jobId,
+      jobId,
+      summary,
+    );
     // The renders have just been written under the job's name. They belong to
     // whoever started it, whether or not this preview is ever saved.
     await this.access.grant('file', storedEvidenceUrls(summary), ownerId);
@@ -515,7 +557,7 @@ export class DetectionsService {
     if (job.status === 'failed') {
       detection.phase2Status = 'failed';
       detection.phase2Error = job.error ?? 'the analysis failed';
-      detection.phase2At = new Date().toISOString();
+      detection.phase2At = new Date();
       return { detection: await this.detectionRepository.save(detection), job };
     }
 
@@ -550,7 +592,13 @@ export class DetectionsService {
     // does not. Named after the job rather than the screening, so a preview that
     // is later saved reuses the very files the doctor was already looking at
     // instead of writing a second copy under a new name.
-    await storeEvidenceImages(this.severityService, jobId, jobId, summary);
+    await storeEvidenceImages(
+      this.storage,
+      this.severityService,
+      jobId,
+      jobId,
+      summary,
+    );
     await this.access.grant(
       'file',
       storedEvidenceUrls(summary),
@@ -563,35 +611,64 @@ export class DetectionsService {
     };
 
     detection.phase2Summary = summary;
-    detection.phase2Evidence = await this.severityService
-      .evidence(jobId)
-      .catch((error) => {
-        // The assessment is what the app shows; the packets only drive the
-        // overlay viewer. Losing them must not lose the grading.
-        this.logger.warn(
-          `evidence packets unavailable for ${detection.id}: ${String(error)}`,
-        );
-        return null;
-      });
+    detection.phase2EvidenceKey = await this.storeEvidencePackets(
+      detection.id,
+      jobId,
+    );
+    detection.phase2Evidence = null;
     detection.severity = patient.severity ?? 'unknown';
     detection.severityUrgent = Boolean(patient.urgent);
     detection.phase2Status = 'done';
     detection.phase2Error = null;
-    detection.phase2At = new Date().toISOString();
+    detection.phase2At = new Date();
+    detection.phase2Version =
+      typeof summary.pipeline_version === 'string'
+        ? summary.pipeline_version
+        : null;
 
     return this.detectionRepository.save(detection);
   }
 
+  /**
+   * Fetches the per-photograph packets from the analyser and keeps them in
+   * storage, one JSON object per screening.
+   *
+   * The assessment is what the app shows; the packets only drive the overlay
+   * viewer. Losing them must not lose the grading, so a failure here is logged
+   * and the screening is saved without them.
+   */
+  private async storeEvidencePackets(
+    detectionId: string,
+    jobId: string,
+  ): Promise<string | null> {
+    try {
+      const packets = await this.severityService.evidence(jobId);
+      const key = evidenceKey(detectionId);
+      await this.storage.put(key, JSON.stringify(packets), 'application/json');
+      return key;
+    } catch (error) {
+      this.logger.warn(
+        `evidence packets unavailable for ${detectionId}: ${String(error)}`,
+      );
+      return null;
+    }
+  }
+
   /** The per-photograph packets, fetched only when the evidence viewer opens.
    *
-   * The column is `select: false`, so it has to be asked for by name here. That
-   * is the point: no other query carries it. */
+   * From storage. A screening analysed before the packets moved there may still
+   * hold them in the old column, which is `select: false` and so is asked for
+   * by name here: no other query carries it. */
   async severityEvidence(id: string, ownerId: string) {
     const row = await this.detectionRepository.findOne({
       where: { id, ownerId },
-      select: { id: true, phase2Evidence: true },
+      select: { id: true, phase2EvidenceKey: true, phase2Evidence: true },
     });
     if (!row) throw new NotFoundException('Detection not found');
+    if (row.phase2EvidenceKey) {
+      const bytes = await this.storage.read(row.phase2EvidenceKey);
+      return JSON.parse(bytes.toString('utf8')) as Record<string, unknown>;
+    }
     return row.phase2Evidence ?? { packets: {} };
   }
 
@@ -772,7 +849,20 @@ export class DetectionsService {
 
     if (decided) {
       detection.decidedAt =
-        dto.doctorDecision === 'Pending' ? null : new Date().toISOString();
+        dto.doctorDecision === 'Pending' ? null : new Date();
+    }
+
+    // Moving a screening to another patient: that patient must exist and be
+    // this doctor's. The foreign key would refuse a missing one anyway, but
+    // with a database error instead of a sentence.
+    const moved = dto.patientId && dto.patientId !== detection.patientId;
+    if (moved) {
+      const patient = await this.patientRepository.findOneBy({
+        id: dto.patientId,
+        ownerId,
+      });
+      if (!patient) throw new BadRequestException('Unknown patient');
+      detection.patientName = `${patient.firstName} ${patient.lastName}`.trim();
     }
 
     applyChanges(detection, dto);
@@ -847,11 +937,12 @@ export class DetectionsService {
     if (!detection) return false;
 
     const urls = storedImageUrls(detection);
+    const keys = storedObjectKeys(detection);
     const label = this.label(detection);
     const detectionId = detection.id;
 
     await this.detectionRepository.remove(detection);
-    await removeStoredImages(urls);
+    await this.storage.remove(keys);
     // Files are gone, so their grants must go too. A grant left behind is a
     // row saying someone may read something that no longer exists, and the
     // next upload could be given the same name.
@@ -869,12 +960,13 @@ export class DetectionsService {
   }
 
   async removeByPatient(patientId: string, ownerId: string): Promise<number> {
-    const detections = await this.findByPatient(patientId, ownerId);
+    const [detections] = await this.findByPatient(patientId, ownerId);
     if (detections.length === 0) return 0;
 
     const urls = detections.flatMap(storedImageUrls);
+    const keys = detections.flatMap(storedObjectKeys);
     await this.detectionRepository.remove(detections);
-    await removeStoredImages(urls);
+    await this.storage.remove(keys);
     await this.access.revoke('file', urls);
     // Not logged per screening: these are removed because the patient was,
     // and the patient's own line already says how many went with them.

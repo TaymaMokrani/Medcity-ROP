@@ -44,8 +44,10 @@ export class AuditEntry {
   id: string;
 
   /** The doctor who acted. Indexed because every read is "mine, newest first". */
-  @Index()
-  @Column()
+  @Index('IDX_audit_log_actor')
+  @Column('uuid')
+  // No foreign key, on purpose: the log keeps its lines whatever happens to
+  // the rows it mentions. Same reason the labels below are copies.
   actorId: string;
 
   @Column('varchar')
@@ -65,7 +67,7 @@ export class AuditEntry {
   @Column({ type: 'text', nullable: true })
   detail: string | null;
 
-  @Index()
-  @Column()
-  at: string;
+  @Index('IDX_audit_log_at')
+  @Column('timestamptz')
+  at: Date;
 }

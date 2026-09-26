@@ -8,6 +8,7 @@ import { AccessGrant } from '../access/access-grant.entity';
 import { AuditService } from '../audit/audit.service';
 import { MlService } from '../ml/ml.service';
 import { SeverityService } from '../severity/severity.service';
+import { StorageService } from '../storage/storage.service';
 
 /**
  * A severity analysis started before the screening is saved has no record
@@ -75,6 +76,7 @@ function build() {
     severity as unknown as SeverityService,
     access,
     { record: () => Promise.resolve() } as unknown as AuditService,
+    {} as unknown as StorageService,
   );
 
   return { service, access, reached };

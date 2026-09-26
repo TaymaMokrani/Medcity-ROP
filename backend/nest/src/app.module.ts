@@ -10,6 +10,7 @@ import { WorkspaceModule } from './workspace/workspace.module';
 import { AccessModule } from './access/access.module';
 import { AuditModule } from './audit/audit.module';
 import { FilesModule } from './files/files.module';
+import { StorageModule } from './storage/storage.module';
 import { validateEnv } from './config/env.validation';
 import { buildDataSourceOptions } from './database/data-source-options';
 @Module({
@@ -23,6 +24,7 @@ import { buildDataSourceOptions } from './database/data-source-options';
       }),
       inject: [ConfigService],
     }),
+    StorageModule,
     AccessModule,
     AuditModule,
     AuthModule,
